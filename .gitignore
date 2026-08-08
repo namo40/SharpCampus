@@ -1,0 +1,11 @@
+# Local-only working folders
+.design/
+.plan/
+.research/
+
+# Local Claude instructions
+CLAUDE.local.md
+AGENTS.override.md
+
+# IDE
+.idea/
