@@ -5,6 +5,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ConsoleAppFramework">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="MagicOnion.Client" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SharpCampus.Shared\SharpCampus.Shared.csproj" />
     <ProjectReference Include="..\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
   </ItemGroup>

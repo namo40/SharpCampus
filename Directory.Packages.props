@@ -5,9 +5,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.83.0" />
+    <PackageVersion Include="MagicOnion.Abstractions" Version="7.10.2" />
+    <PackageVersion Include="MagicOnion.Client" Version="7.10.2" />
+    <PackageVersion Include="MagicOnion.Server" Version="7.10.2" />
+    <PackageVersion Include="MagicOnion.Server.JsonTranscoding" Version="7.10.2" />
+    <PackageVersion Include="MagicOnion.Server.JsonTranscoding.Swagger" Version="7.10.2" />
+    <PackageVersion Include="MessagePack" Version="3.1.8" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="Spectre.Console" Version="0.57.2" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.10" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="ZLogger" Version="2.5.10" />
   </ItemGroup>
 
 </Project>

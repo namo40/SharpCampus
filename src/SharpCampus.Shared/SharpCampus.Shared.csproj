@@ -2,6 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
+    <!-- Consumed by MagicOnion JSON transcoding Swagger to document the generated HTTP endpoints. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MagicOnion.Abstractions" />
+    <PackageReference Include="MessagePack" />
+  </ItemGroup>
 
 </Project>
