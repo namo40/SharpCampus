@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCampus.Shared\SharpCampus.Shared.csproj" />
+    <ProjectReference Include="..\SharpCampus.Shared.Internal\SharpCampus.Shared.Internal.csproj" />
+    <ProjectReference Include="..\SharpCampus.Server.Common\SharpCampus.Server.Common.csproj" />
+    <ProjectReference Include="..\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -9,3 +9,10 @@ AGENTS.override.md
 
 # IDE
 .idea/
+.vs/
+*.user
+
+# Build output
+bin/
+obj/
+artifacts/

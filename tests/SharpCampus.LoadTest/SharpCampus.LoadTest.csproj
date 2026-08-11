@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpCampus.Shared\SharpCampus.Shared.csproj" />
+    <ProjectReference Include="..\..\src\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
+  </ItemGroup>
+
+</Project>
