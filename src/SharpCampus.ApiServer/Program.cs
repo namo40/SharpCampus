@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.AddSharpCampusLogging();
 builder.Services.AddServerOptions(builder.Configuration);
+builder.Services.AddSupabaseJwtAuthentication(builder.Configuration);
 
 var magicOnion = builder.Services.AddMagicOnion();
 
@@ -29,8 +30,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 // Services live in SharpCampus.Server.Common, which the default entry-assembly scan would not reach.
-app.MapMagicOnionService([typeof(StatusService)]);
+app.MapMagicOnionService([typeof(StatusService), typeof(AccountService)]);
 
 app.Logger.ServerStarted(app.Services.GetRequiredService<IOptions<ServerOptions>>().Value.Name, ServerVersion.Current);
 

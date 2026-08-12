@@ -9,6 +9,10 @@
   <ItemGroup>
     <PackageReference Include="MagicOnion.Abstractions" />
     <PackageReference Include="MessagePack" />
+    <PackageReference Include="UnitGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

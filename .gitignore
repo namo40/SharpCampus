@@ -16,3 +16,8 @@ AGENTS.override.md
 bin/
 obj/
 artifacts/
+
+# Supabase CLI working state
+supabase/.branches/
+supabase/.temp/
+supabase/signing_keys.json

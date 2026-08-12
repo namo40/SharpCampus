@@ -29,7 +29,8 @@ Package versions are managed centrally in `Directory.Packages.props`, and build 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [Docker](https://www.docker.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/), running
+- [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started)
 
 ## Build and test
 
@@ -37,6 +38,42 @@ Package versions are managed centrally in `Directory.Packages.props`, and build 
 dotnet build
 dotnet test
 ```
+
+The test suite is self-contained — it needs neither Docker nor a running Supabase stack.
+
+## Quick start
+
+Accounts live in [Supabase Auth](https://supabase.com/docs/guides/auth), so bring the local stack up first. It runs
+Postgres and the auth API in Docker, and prints the URL and keys the servers and client are configured with.
+
+```bash
+supabase start
+```
+
+Then start the meta-game server:
+
+```bash
+dotnet run --project src/SharpCampus.ApiServer
+```
+
+And drive it from the console client, which starts a REPL when you pass no arguments:
+
+```bash
+dotnet run --project src/SharpCampus.Cli
+```
+
+```text
+cli> signup player@example.com hunter2
+cli> login player@example.com hunter2
+cli> whoami
+cli> logout
+```
+
+`signup` and `login` talk to Supabase directly and store the resulting access token under your user profile;
+`whoami` sends that token to the ApiServer, which verifies it and answers with the account behind it. Every command
+also works as a one-shot invocation, for example `dotnet run --project src/SharpCampus.Cli -- whoami`.
+
+Stop the stack with `supabase stop` when you are done.
 
 ## License
 

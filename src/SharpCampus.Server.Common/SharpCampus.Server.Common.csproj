@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="MagicOnion.Server" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="ZLogger" />
   </ItemGroup>
 

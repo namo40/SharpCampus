@@ -29,7 +29,8 @@ SharpCampus は [MagicOnion](https://github.com/Cysharp/MagicOnion) と [Cysharp
 ## 前提環境
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [Docker](https://www.docker.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)（起動している必要があります）
+- [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started)
 
 ## ビルドとテスト
 
@@ -37,6 +38,42 @@ SharpCampus は [MagicOnion](https://github.com/Cysharp/MagicOnion) と [Cysharp
 dotnet build
 dotnet test
 ```
+
+テストは単体で完結しており、Docker も Supabase スタックも必要ありません。
+
+## クイックスタート
+
+アカウントは [Supabase Auth](https://supabase.com/docs/guides/auth) が管理するので、まずローカルスタックを起動します。
+Postgres と認証 API を Docker で動かし、サーバーとクライアントが使う URL とキーを表示します。
+
+```bash
+supabase start
+```
+
+続いてメタゲームサーバーを起動します。
+
+```bash
+dotnet run --project src/SharpCampus.ApiServer
+```
+
+コンソールクライアントから操作します。引数なしで実行すると REPL が起動します。
+
+```bash
+dotnet run --project src/SharpCampus.Cli
+```
+
+```text
+cli> signup player@example.com hunter2
+cli> login player@example.com hunter2
+cli> whoami
+cli> logout
+```
+
+`signup` と `login` は Supabase に直接リクエストし、受け取ったアクセストークンをユーザープロファイルの下に保存します。
+`whoami` はそのトークンを ApiServer に送り、サーバーが検証したうえでどのアカウントかを返します。すべてのコマンドは
+単発の実行にも対応しています。たとえば `dotnet run --project src/SharpCampus.Cli -- whoami` のように使います。
+
+使い終わったら `supabase stop` でスタックを停止します。
 
 ## ライセンス
 
