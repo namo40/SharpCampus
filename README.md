@@ -50,6 +50,20 @@ Postgres and the auth API in Docker, and prints the URL and keys the servers and
 supabase start
 ```
 
+Profiles live in the same Postgres instance, in tables of the game's own. Create them with PowerShell:
+
+```powershell
+Get-Content deploy/db/schema.sql | docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres
+```
+
+or with a POSIX shell:
+
+```bash
+docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/schema.sql
+```
+
+`deploy/db/schema.sql` drops the tables before recreating them, so running it again is how you reset the database.
+
 Then start the meta-game server:
 
 ```bash
@@ -66,12 +80,16 @@ dotnet run --project src/SharpCampus.Cli
 cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
+cli> nickname boardsweeper
 cli> logout
 ```
 
 `signup` and `login` talk to Supabase directly and store the resulting access token under your user profile;
-`whoami` sends that token to the ApiServer, which verifies it and answers with the account behind it. Every command
-also works as a one-shot invocation, for example `dotnet run --project src/SharpCampus.Cli -- whoami`.
+`whoami` sends that token to the ApiServer, which verifies it and answers with the account behind it plus its
+player profile — nickname, coins and rating. The first `whoami` is what creates that profile, under a nickname
+derived from the account id. `nickname` renames it: 2 to 16 letters, digits or underscores, unique across accounts
+and compared case-insensitively. Every command also works as a one-shot invocation, for example
+`dotnet run --project src/SharpCampus.Cli -- whoami`.
 
 Stop the stack with `supabase stop` when you are done.
 

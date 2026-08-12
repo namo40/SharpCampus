@@ -1,23 +1,19 @@
 using Grpc.Core;
-using Grpc.Net.Client;
-using MagicOnion.Client;
+using NSubstitute;
+using SharpCampus.Server.Common.Data;
 using SharpCampus.Shared.Identity;
+using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Services;
+using SharpCampus.Shared.Values;
 using Xunit;
 
 namespace SharpCampus.ApiServer.Tests;
 
 public sealed class AccountServiceTests(SupabaseTestFactory factory) : IClassFixture<SupabaseTestFactory>, IDisposable
 {
-    private readonly List<GrpcChannel> _channels = [];
+    private readonly MagicOnionTestClient _client = new();
 
-    public void Dispose()
-    {
-        foreach (var channel in _channels)
-        {
-            channel.Dispose();
-        }
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task GetMyIdentityAsync_ReturnsTheClaimsOfTheBearerToken()
@@ -62,29 +58,60 @@ public sealed class AccountServiceTests(SupabaseTestFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task GetMyProfileAsync_CreatesTheProfileForTheAccountInTheToken()
+    {
+        var userId = Guid.NewGuid();
+        var profiles = Substitute.For<IProfileRepository>();
+        profiles.GetAsync(new UserId(userId)).Returns(Stored(userId, "player_0123abcd"));
+
+        await CreateClient(profiles, userId).GetMyProfileAsync();
+
+        await profiles.Received(1).CreateIfAbsentAsync(
+            new UserId(userId),
+            Arg.Is<string>(nickname => nickname.StartsWith(NicknameRules.InitialPrefix) && NicknameRules.IsValid(nickname)));
+    }
+
+    [Fact]
+    public async Task GetMyProfileAsync_ReturnsTheStoredProfile()
+    {
+        var userId = Guid.NewGuid();
+        var profiles = Substitute.For<IProfileRepository>();
+        profiles.GetAsync(new UserId(userId)).Returns(Stored(userId, "boardsweeper"));
+
+        var profile = await CreateClient(profiles, userId).GetMyProfileAsync();
+
+        Assert.Equal(new UserId(userId), profile.UserId);
+        Assert.Equal("boardsweeper", profile.Nickname);
+        Assert.Equal(new Coins(120), profile.Coins);
+        Assert.Equal(new Rating(1180), profile.Rating);
+    }
+
+    [Fact]
+    public async Task GetMyProfileAsync_WithoutAToken_IsRejected()
+    {
+        var client = CreateClient(token: null);
+
+        var exception = await Assert.ThrowsAsync<RpcException>(async () => await client.GetMyProfileAsync());
+
+        Assert.Equal(StatusCode.Unauthenticated, exception.StatusCode);
+    }
+
+    [Fact]
     public async Task GetStatusAsync_StaysAnonymous()
     {
-        var channel = GrpcChannel.ForAddress(
-            factory.Server.BaseAddress,
-            new GrpcChannelOptions { HttpHandler = factory.Server.CreateHandler() });
-        _channels.Add(channel);
-
-        var status = await MagicOnionClient.Create<IStatusService>(channel).GetStatusAsync();
+        var status = await _client.Create<IStatusService>(factory).GetStatusAsync();
 
         Assert.Equal("SharpCampus.ApiServer", status.ServerName);
     }
 
-    private IAccountService CreateClient(string? token)
-    {
-        var channel = GrpcChannel.ForAddress(
-            factory.Server.BaseAddress,
-            new GrpcChannelOptions { HttpHandler = factory.Server.CreateHandler() });
-        _channels.Add(channel);
+    private static Profile Stored(Guid userId, string nickname) =>
+        new(new UserId(userId), nickname) { Coins = new Coins(120), Rating = new Rating(1180) };
 
-        var client = MagicOnionClient.Create<IAccountService>(channel);
+    private IAccountService CreateClient(string? token) =>
+        _client.Create<IAccountService>(factory, token);
 
-        return token is null
-            ? client
-            : client.WithHeaders(new Metadata { { "authorization", $"Bearer {token}" } });
-    }
+    private IAccountService CreateClient(IProfileRepository profiles, Guid userId) =>
+        _client.Create<IAccountService>(
+            factory.WithProfiles(profiles),
+            factory.CreateToken(userId, "player@example.com"));
 }

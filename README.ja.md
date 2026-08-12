@@ -50,6 +50,20 @@ Postgres と認証 API を Docker で動かし、サーバーとクライアン�
 supabase start
 ```
 
+プロフィールは同じ Postgres インスタンスにゲーム専用のテーブルとして保存します。PowerShell では次のように作成します。
+
+```powershell
+Get-Content deploy/db/schema.sql | docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres
+```
+
+POSIX シェルでは次のように作成します。
+
+```bash
+docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/schema.sql
+```
+
+`deploy/db/schema.sql` はテーブルを削除してから作り直すので、もう一度実行することがデータベースの初期化になります。
+
 続いてメタゲームサーバーを起動します。
 
 ```bash
@@ -66,12 +80,16 @@ dotnet run --project src/SharpCampus.Cli
 cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
+cli> nickname boardsweeper
 cli> logout
 ```
 
 `signup` と `login` は Supabase に直接リクエストし、受け取ったアクセストークンをユーザープロファイルの下に保存します。
-`whoami` はそのトークンを ApiServer に送り、サーバーが検証したうえでどのアカウントかを返します。すべてのコマンドは
-単発の実行にも対応しています。たとえば `dotnet run --project src/SharpCampus.Cli -- whoami` のように使います。
+`whoami` はそのトークンを ApiServer に送り、サーバーが検証したうえでどのアカウントかを返し、あわせてプレイヤー
+プロフィール（ニックネーム、コイン、レーティング）も返します。プロフィールは最初の `whoami` のときに、アカウント ID から
+作ったニックネームで生成されます。`nickname` はそのニックネームを変更するコマンドです。ニックネームは英数字と
+アンダースコアだけの2〜16文字で、大文字と小文字を区別せずに比較するため、他のアカウントが使っている名前は指定できません。
+すべてのコマンドは単発の実行にも対応しています。たとえば `dotnet run --project src/SharpCampus.Cli -- whoami` のように使います。
 
 使い終わったら `supabase stop` でスタックを停止します。
 

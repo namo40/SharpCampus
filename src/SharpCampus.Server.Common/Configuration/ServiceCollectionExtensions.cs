@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SharpCampus.Server.Common.Authentication;
+using SharpCampus.Server.Common.Data;
 
 namespace SharpCampus.Server.Common.Configuration;
 
@@ -41,6 +44,19 @@ public static class ServiceCollectionExtensions
         services.AddAuthorization();
         services.AddHttpContextAccessor();
         services.AddScoped<IUserContext, UserContext>();
+        return services;
+    }
+
+    public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
+
+        // Pooling hands each request a reset context instead of a new one, which matters because building
+        // the model is the expensive part and a game server opens one of these per call.
+        services.AddDbContextPool<SharpCampusDbContext>((provider, options) =>
+            options.UseNpgsql(provider.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
+
+        services.AddScoped<IProfileRepository, ProfileRepository>();
         return services;
     }
 }

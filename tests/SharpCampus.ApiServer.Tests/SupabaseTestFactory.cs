@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using SharpCampus.Server.Common.Data;
 
 namespace SharpCampus.ApiServer.Tests;
 
@@ -29,6 +30,11 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
 
     public string CreateForeignlySignedToken(Guid userId, string email) =>
         CreateToken(userId, email, DateTime.UtcNow.AddMinutes(5), _foreignAlgorithm);
+
+    // Swaps the profile store for a test double, so the suite needs no Postgres either.
+    public WebApplicationFactory<Program> WithProfiles(IProfileRepository profiles) =>
+        WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services => services.AddScoped(_ => profiles)));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.ConfigureTestServices(services =>

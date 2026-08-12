@@ -13,4 +13,10 @@ public interface IAccountService : IService<IAccountService>
     /// </summary>
     /// <returns>The identifier and email address of the authenticated account.</returns>
     UnaryResult<IdentityResponse> GetMyIdentityAsync();
+
+    /// <summary>
+    /// Gets the caller's profile. The first call creates it with a server-assigned nickname.
+    /// </summary>
+    /// <returns>The nickname, coin balance and rating of the authenticated account.</returns>
+    UnaryResult<ProfileResponse> GetMyProfileAsync();
 }

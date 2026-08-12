@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <!-- Cleared so the multi-targeting below beats the single framework Directory.Build.props sets. -->
+    <TargetFramework />
+    <!-- netstandard2.1 keeps the contracts loadable from Unity; net10.0 is what the servers reference. -->
+    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
     <!-- Consumed by MagicOnion JSON transcoding Swagger to document the generated HTTP endpoints. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
@@ -13,6 +16,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
   </ItemGroup>
 
 </Project>

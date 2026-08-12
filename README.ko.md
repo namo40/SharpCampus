@@ -50,6 +50,20 @@ Docker로 실행하고, 서버와 클라이언트가 사용하는 URL과 키를 
 supabase start
 ```
 
+프로필은 같은 Postgres 인스턴스 안에 게임 전용 테이블로 저장합니다. PowerShell에서는 이렇게 만듭니다.
+
+```powershell
+Get-Content deploy/db/schema.sql | docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres
+```
+
+POSIX 셸에서는 이렇게 만듭니다.
+
+```bash
+docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/schema.sql
+```
+
+`deploy/db/schema.sql`은 테이블을 지우고 다시 만들기 때문에, 다시 실행하는 것이 곧 데이터베이스 초기화입니다.
+
 그다음 메타 게임 서버를 실행합니다.
 
 ```bash
@@ -66,12 +80,15 @@ dotnet run --project src/SharpCampus.Cli
 cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
+cli> nickname boardsweeper
 cli> logout
 ```
 
 `signup`과 `login`은 Supabase에 직접 요청해서 받은 액세스 토큰을 사용자 프로필 폴더에 저장합니다. `whoami`는 그 토큰을
-ApiServer에 보내고, 서버는 토큰을 검증한 뒤 어떤 계정인지 응답합니다. 모든 명령은 한 번만 실행하는 형태로도 쓸 수 있습니다.
-예를 들면 `dotnet run --project src/SharpCampus.Cli -- whoami`처럼 씁니다.
+ApiServer에 보내고, 서버는 토큰을 검증한 뒤 어떤 계정인지와 함께 플레이어 프로필(닉네임, 코인, 레이팅)을 응답합니다.
+프로필은 첫 `whoami` 때 계정 ID에서 만든 닉네임으로 생성됩니다. `nickname`은 그 닉네임을 바꾸는 명령입니다. 닉네임은
+영문자와 숫자, 밑줄만 써서 2~16자로 지어야 하고, 대소문자를 구분하지 않고 비교하므로 다른 계정이 이미 쓰는 이름은 쓸 수
+없습니다. 모든 명령은 한 번만 실행하는 형태로도 쓸 수 있습니다. 예를 들면 `dotnet run --project src/SharpCampus.Cli -- whoami`처럼 씁니다.
 
 다 사용했으면 `supabase stop`으로 스택을 내립니다.
 
