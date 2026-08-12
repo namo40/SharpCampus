@@ -17,11 +17,14 @@ SharpCampus는 [MagicOnion](https://github.com/Cysharp/MagicOnion)과 [Cysharp](
 | `src/SharpCampus.RoomServer` | 서버 권위 틱 루프를 돌리는 실시간 대전 호스트입니다. |
 | `src/SharpCampus.Server.Common` | 두 서버 호스트가 함께 쓰는 공통 구성 요소입니다. |
 | `src/SharpCampus.Cli` | 게임을 플레이하고 서버를 검증하는 데 쓰는 .NET 콘솔 클라이언트입니다. |
-| `tools/SharpCampus.MasterDataTool` | 게임 마스터 데이터를 생성하는 커맨드라인 도구입니다. |
+| `tools/SharpCampus.MasterDataTool` | 게임 마스터 데이터 원본을 검증하고, 배포된 서버가 읽는 데이터베이스 파일을 만드는 커맨드라인 도구입니다. |
+| `masterdata/` | 마스터 데이터 원본으로, 테이블마다 JSON 파일이 하나씩 있습니다. 게임 상수, 중력 커브, 공격·콤보 테이블, 코인 보상과 레이팅 상수, 스킨, 미션이 들어 있습니다. |
+| `tests/SharpCampus.Shared.Tests` | `SharpCampus.Shared` 테스트. |
 | `tests/SharpCampus.GameCore.Tests` | `SharpCampus.GameCore` 테스트. |
 | `tests/SharpCampus.ApiServer.Tests` | `SharpCampus.ApiServer` 테스트. |
 | `tests/SharpCampus.RoomServer.Tests` | `SharpCampus.RoomServer` 테스트. |
 | `tests/SharpCampus.ServerCommon.Tests` | `SharpCampus.Server.Common` 테스트. |
+| `tests/SharpCampus.MasterDataTool.Tests` | `SharpCampus.MasterDataTool` 테스트. |
 | `tests/SharpCampus.LoadTest` | 서버 부하 테스트 도구. |
 
 패키지 버전은 `Directory.Packages.props`에서 중앙 관리하고, 모든 프로젝트가 공유하는 빌드 설정은 `Directory.Build.props`에 있습니다.
@@ -64,7 +67,13 @@ docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/
 
 `deploy/db/schema.sql`은 테이블을 지우고 다시 만들기 때문에, 다시 실행하는 것이 곧 데이터베이스 초기화입니다.
 
-그다음 메타 게임 서버를 실행합니다.
+게임 밸런스 수치는 `masterdata/` 폴더에 테이블별 JSON 파일로 들어 있습니다. 틱 레이트, 중력 커브, 공격·콤보
+테이블, 코인 보상과 레이팅 상수, 스킨, 미션이 여기에 해당합니다. 메타 게임 서버와 대전 서버가 시작할 때 이
+파일들을 직접 읽으므로, 값을 고치고 서버를 다시 시작하기만 하면 반영됩니다.
+`tools/SharpCampus.MasterDataTool`은 `validate` 명령으로 원본이 스키마에 맞는지 검사하고,
+`build` 명령으로 컨테이너 이미지에 넣을 데이터베이스 파일 하나를 만듭니다. 로컬 실행에는 둘 다 필요하지 않습니다.
+
+이어서 메타 게임 서버를 실행합니다.
 
 ```bash
 dotnet run --project src/SharpCampus.ApiServer

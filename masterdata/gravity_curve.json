@@ -1,0 +1,17 @@
+[
+  { "level": 1, "ticksPerCell": 20 },
+  { "level": 2, "ticksPerCell": 18 },
+  { "level": 3, "ticksPerCell": 15 },
+  { "level": 4, "ticksPerCell": 12 },
+  { "level": 5, "ticksPerCell": 10 },
+  { "level": 6, "ticksPerCell": 8 },
+  { "level": 7, "ticksPerCell": 7 },
+  { "level": 8, "ticksPerCell": 6 },
+  { "level": 9, "ticksPerCell": 5 },
+  { "level": 10, "ticksPerCell": 4 },
+  { "level": 11, "ticksPerCell": 3 },
+  { "level": 12, "ticksPerCell": 3 },
+  { "level": 13, "ticksPerCell": 2 },
+  { "level": 14, "ticksPerCell": 2 },
+  { "level": 15, "ticksPerCell": 1 }
+]

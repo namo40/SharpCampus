@@ -1,8 +1,5 @@
-namespace SharpCampus.MasterDataTool;
+using ConsoleAppFramework;
 
-internal static class Program
-{
-    private static void Main()
-    {
-    }
-}
+// Command classes register themselves through [RegisterCommands]; nothing is added by hand here.
+var app = ConsoleApp.Create();
+app.Run(args);

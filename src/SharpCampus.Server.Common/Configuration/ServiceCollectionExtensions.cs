@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SharpCampus.Server.Common.Authentication;
 using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.MasterData;
 
 namespace SharpCampus.Server.Common.Configuration;
 
@@ -57,6 +58,19 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(provider.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
 
         services.AddScoped<IProfileRepository, ProfileRepository>();
+        return services;
+    }
+
+    public static IServiceCollection AddMasterData(this IServiceCollection services, IConfiguration configuration)
+    {
+        var section = configuration.GetSection(MasterDataOptions.SectionName);
+        services.Configure<MasterDataOptions>(section);
+
+        var path = (section.Get<MasterDataOptions>() ?? new MasterDataOptions()).Path;
+
+        // Loaded here rather than from a factory so missing or invalid data stops startup instead of
+        // the first request that needs it.
+        services.AddSingleton(MasterDataLoader.Load(path));
         return services;
     }
 }

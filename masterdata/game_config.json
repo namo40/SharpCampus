@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "tickRate": 20,
+  "lockDelayTicks": 10,
+  "lockResetMax": 15,
+  "nextCount": 5,
+  "inputPerTickMax": 10,
+  "garbageCapPerLock": 8,
+  "graceTicks": 200,
+  "countdownSec": 3,
+  "rematchTimeoutSec": 10,
+  "joinTimeoutSec": 30,
+  "levelUpIntervalSec": 30,
+  "maxLevel": 15
+}

@@ -5,7 +5,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SharpCampus.Server.Common\SharpCampus.Server.Common.csproj" />
+    <InternalsVisibleTo Include="SharpCampus.MasterDataTool.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ConsoleAppFramework">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpCampus.Shared\SharpCampus.Shared.csproj" />
   </ItemGroup>
 
 </Project>

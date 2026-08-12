@@ -15,4 +15,12 @@
     <ProjectReference Include="..\SharpCampus.Shared\SharpCampus.Shared.csproj" />
   </ItemGroup>
 
+  <!-- Copied into the output of everything that hosts a server, so a local run imports the sources
+       as they are edited. The container image carries a prebuilt database instead and opts out. -->
+  <ItemGroup Condition="'$(ExcludeMasterDataSources)' != 'true'">
+    <Content Include="..\..\masterdata\*.json"
+             Link="masterdata\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

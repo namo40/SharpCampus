@@ -12,8 +12,10 @@
     <Project Path="tests/SharpCampus.ApiServer.Tests/SharpCampus.ApiServer.Tests.csproj" />
     <Project Path="tests/SharpCampus.GameCore.Tests/SharpCampus.GameCore.Tests.csproj" />
     <Project Path="tests/SharpCampus.LoadTest/SharpCampus.LoadTest.csproj" />
+    <Project Path="tests/SharpCampus.MasterDataTool.Tests/SharpCampus.MasterDataTool.Tests.csproj" />
     <Project Path="tests/SharpCampus.RoomServer.Tests/SharpCampus.RoomServer.Tests.csproj" />
     <Project Path="tests/SharpCampus.ServerCommon.Tests/SharpCampus.ServerCommon.Tests.csproj" />
+    <Project Path="tests/SharpCampus.Shared.Tests/SharpCampus.Shared.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/SharpCampus.MasterDataTool/SharpCampus.MasterDataTool.csproj" />

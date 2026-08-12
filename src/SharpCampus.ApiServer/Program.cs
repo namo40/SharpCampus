@@ -2,7 +2,9 @@ using Microsoft.Extensions.Options;
 using SharpCampus.Server.Common;
 using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Logging;
+using SharpCampus.Server.Common.MasterData;
 using SharpCampus.Server.Common.Services;
+using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +13,7 @@ builder.Logging.AddSharpCampusLogging();
 builder.Services.AddServerOptions(builder.Configuration);
 builder.Services.AddSupabaseJwtAuthentication(builder.Configuration);
 builder.Services.AddDatabase(builder.Configuration);
+builder.Services.AddMasterData(builder.Configuration);
 
 var magicOnion = builder.Services.AddMagicOnion();
 
@@ -42,6 +45,7 @@ app.MapMagicOnionService([
 ]);
 
 app.Logger.ServerStarted(app.Services.GetRequiredService<IOptions<ServerOptions>>().Value.Name, ServerVersion.Current);
+app.Logger.LogMasterData(app.Services.GetRequiredService<MemoryDatabase>());
 
 app.Run();
 

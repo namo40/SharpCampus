@@ -17,11 +17,14 @@ Everything from the game servers down to containerized deployment lives in this 
 | `src/SharpCampus.RoomServer` | Real-time match host running the server-authoritative tick loop. |
 | `src/SharpCampus.Server.Common` | Building blocks shared by both server hosts. |
 | `src/SharpCampus.Cli` | .NET console client used to play the game and to exercise the servers. |
-| `tools/SharpCampus.MasterDataTool` | Command-line tool for building game master data. |
+| `tools/SharpCampus.MasterDataTool` | Command-line tool that validates the game master data sources and builds the database a deployed server loads. |
+| `masterdata/` | Master data sources, one JSON file per table: game constants, gravity curve, attack and combo tables, coin payouts and rating constants, skins and missions. |
+| `tests/SharpCampus.Shared.Tests` | Tests for `SharpCampus.Shared`. |
 | `tests/SharpCampus.GameCore.Tests` | Tests for `SharpCampus.GameCore`. |
 | `tests/SharpCampus.ApiServer.Tests` | Tests for `SharpCampus.ApiServer`. |
 | `tests/SharpCampus.RoomServer.Tests` | Tests for `SharpCampus.RoomServer`. |
 | `tests/SharpCampus.ServerCommon.Tests` | Tests for `SharpCampus.Server.Common`. |
+| `tests/SharpCampus.MasterDataTool.Tests` | Tests for `SharpCampus.MasterDataTool`. |
 | `tests/SharpCampus.LoadTest` | Load-testing harness for the servers. |
 
 Package versions are managed centrally in `Directory.Packages.props`, and build settings shared by every project live in `Directory.Build.props`.
@@ -64,7 +67,14 @@ docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/
 
 `deploy/db/schema.sql` drops the tables before recreating them, so running it again is how you reset the database.
 
-Then start the meta-game server:
+Game balance lives in `masterdata/` as editable JSON, one file per table — tick rate, gravity curve,
+attack and combo tables, coin payouts and rating constants, skins and missions. The meta-game and
+match servers import those files at startup, so editing a value and restarting is all a balance
+change takes. `tools/SharpCampus.MasterDataTool` checks the sources against the schema with its
+`validate` command and compiles them into the single database file a container image ships with
+using `build`; a local run needs neither.
+
+Start the meta-game server:
 
 ```bash
 dotnet run --project src/SharpCampus.ApiServer

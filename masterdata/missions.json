@@ -1,0 +1,37 @@
+[
+  {
+    "missionId": "PLAY_3",
+    "nameKey": "mission.play_3.name",
+    "metric": "MatchesPlayed",
+    "goal": 3,
+    "rewardCoins": 30
+  },
+  {
+    "missionId": "WIN_1",
+    "nameKey": "mission.win_1.name",
+    "metric": "Wins",
+    "goal": 1,
+    "rewardCoins": 50
+  },
+  {
+    "missionId": "CLEAR_40",
+    "nameKey": "mission.clear_40.name",
+    "metric": "LinesCleared",
+    "goal": 40,
+    "rewardCoins": 40
+  },
+  {
+    "missionId": "SEND_20",
+    "nameKey": "mission.send_20.name",
+    "metric": "GarbageSent",
+    "goal": 20,
+    "rewardCoins": 40
+  },
+  {
+    "missionId": "HARDDROP_30",
+    "nameKey": "mission.harddrop_30.name",
+    "metric": "HardDrops",
+    "goal": 30,
+    "rewardCoins": 40
+  }
+]

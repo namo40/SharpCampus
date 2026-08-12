@@ -1,0 +1,5 @@
+[
+  { "comboMin": 2, "comboMax": 3, "bonus": 1 },
+  { "comboMin": 4, "comboMax": 5, "bonus": 2 },
+  { "comboMin": 6, "comboMax": 99, "bonus": 3 }
+]

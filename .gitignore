@@ -16,6 +16,7 @@ AGENTS.override.md
 bin/
 obj/
 artifacts/
+masterdata/*.bin
 
 # Supabase CLI working state
 supabase/.branches/

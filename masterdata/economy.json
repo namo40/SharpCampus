@@ -1,0 +1,7 @@
+{
+  "id": 1,
+  "winCoins": 100,
+  "loseCoins": 30,
+  "ratingK": 32,
+  "ratingInitial": 1000
+}
