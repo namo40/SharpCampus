@@ -2,6 +2,8 @@ using Cysharp.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.Values;
 using Xunit;
 
 namespace SharpCampus.RoomServer.Tests;
@@ -9,77 +11,110 @@ namespace SharpCampus.RoomServer.Tests;
 public class RoomManagerTests
 {
     [Fact]
-    public void GetOrCreate_ReturnsTheSameRoomForAKey()
+    public void CreatedRoom_IsTheOneThatComesBackForItsId()
     {
         using var pool = new ManualLogicLooperPool(20);
-        var manager = new RoomManager(pool, RoomFixture.Rules(), NullLogger<RoomManager>.Instance);
+        var manager = CreateManager(pool);
+        var roomId = new RoomId(Ulid.NewUlid());
 
-        var room = manager.GetOrCreate("alpha");
+        Assert.Equal(CreateRoomOutcome.Created, manager.Create(roomId, RoomFixture.Players()));
+        Assert.True(manager.TryGet(roomId, out var room));
+        Assert.NotNull(room);
+        Assert.Equal(roomId, room.RoomId);
+        Assert.Equal(1, manager.RoomCount);
+    }
 
-        Assert.Same(room, manager.GetOrCreate("alpha"));
-        Assert.NotSame(room, manager.GetOrCreate("beta"));
-        Assert.Equal(2, manager.RoomCount);
+    [Fact]
+    public void UnknownRoomId_HasNoRoom()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+
+        Assert.False(CreateManager(pool).TryGet(new RoomId(Ulid.NewUlid()), out _));
+    }
+
+    [Fact]
+    public void SameRoomIdTwice_IsRefused()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var manager = CreateManager(pool);
+        var roomId = new RoomId(Ulid.NewUlid());
+
+        manager.Create(roomId, RoomFixture.Players());
+
+        Assert.Equal(CreateRoomOutcome.AlreadyExists, manager.Create(roomId, RoomFixture.Players()));
+        Assert.Equal(1, manager.RoomCount);
+    }
+
+    [Fact]
+    public void ServerAtCapacity_RefusesFurtherRooms()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var manager = CreateManager(pool, capacity: 1);
+
+        manager.Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
+
+        Assert.Equal(CreateRoomOutcome.AtCapacity, manager.Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players()));
     }
 
     [Fact]
     public void RegisteredRoom_RunsOnTheLooperAndIsRemovedWhenItCloses()
     {
         using var pool = new ManualLogicLooperPool(20);
-        var manager = new RoomManager(pool, RoomFixture.Rules(joinTimeoutTicks: 3), NullLogger<RoomManager>.Instance);
-        var room = manager.GetOrCreate("alpha");
+        var manager = CreateManager(pool, joinTimeoutTicks: 3);
+        var roomId = new RoomId(Ulid.NewUlid());
+        manager.Create(roomId, RoomFixture.Players());
 
         pool.Tick(2);
 
         Assert.Equal(1, manager.RoomCount);
-        Assert.False(room.IsClosed);
+        Assert.True(manager.TryGet(roomId, out var room));
 
         // The third tick spends the join timeout, which unregisters the action and drops the room.
         pool.Tick();
 
-        Assert.True(room.IsClosed);
+        Assert.True(room!.IsClosed);
         Assert.Equal(0, manager.RoomCount);
-    }
-
-    [Fact]
-    public void GetOrCreate_ReplacesARoomThatHasClosed()
-    {
-        using var pool = new ManualLogicLooperPool(20);
-        var manager = new RoomManager(pool, RoomFixture.Rules(joinTimeoutTicks: 1), NullLogger<RoomManager>.Instance);
-        var closed = manager.GetOrCreate("alpha");
-
-        pool.Tick();
-
-        Assert.True(closed.IsClosed);
-        Assert.NotSame(closed, manager.GetOrCreate("alpha"));
     }
 
     [Fact]
     public async Task RoomWhoseTickThrew_IsTornDownInsteadOfLingering()
     {
         using var pool = new ManualLogicLooperPool(20);
-        var manager = new RoomManager(pool, RoomFixture.Rules(), NullLogger<RoomManager>.Instance);
-        var room = manager.GetOrCreate("alpha");
+        var manager = CreateManager(pool);
+        var roomId = new RoomId(Ulid.NewUlid());
+        manager.Create(roomId, RoomFixture.Players());
+        manager.TryGet(roomId, out var room);
 
-        await manager.ObserveAsync(room, Task.FromException(new InvalidOperationException("tick died")));
+        await manager.ObserveAsync(room!, Task.FromException(new InvalidOperationException("tick died")));
 
-        Assert.True(room.IsClosed);
+        Assert.True(room!.IsClosed);
         Assert.Equal(0, manager.RoomCount);
     }
 
     [Fact]
-    public void GetOrCreate_GivesEachRoomItsOwnSeed()
+    public void EachRoomGetsItsOwnSeed()
     {
         using var pool = new ManualLogicLooperPool(20);
-        var manager = new RoomManager(pool, RoomFixture.Rules(), NullLogger<RoomManager>.Instance);
+        var manager = CreateManager(pool);
 
         var orders = new HashSet<string>();
         for (var i = 0; i < 8; i++)
         {
-            orders.Add(PieceOrder(manager.GetOrCreate($"room-{i}")));
+            var roomId = new RoomId(Ulid.NewUlid());
+            manager.Create(roomId, RoomFixture.Players());
+            manager.TryGet(roomId, out var room);
+            orders.Add(PieceOrder(room!));
         }
 
         Assert.True(orders.Count > 1);
     }
+
+    private static RoomManager CreateManager(ILogicLooperPool pool, int capacity = 100, int joinTimeoutTicks = 5)
+        => new(
+            pool,
+            RoomFixture.Rules(joinTimeoutTicks: joinTimeoutTicks),
+            RoomFixture.Options(capacity),
+            NullLogger<RoomManager>.Instance);
 
     // The piece order is the only thing a seed shows through, so it stands in for the seed itself.
     private static string PieceOrder(DuelRoom room)

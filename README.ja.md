@@ -42,7 +42,8 @@ dotnet build
 dotnet test
 ```
 
-テストは単体で完結しており、Docker も Supabase スタックも必要ありません。
+テストは単体で完結しており、Docker も Supabase スタックも必要ありません。Redis アダプターを検証するテストは
+`localhost:6379` で何も待ち受けていなければ自動でスキップし、下記のコンテナが起動していれば実行されます。
 
 ## クイックスタート
 
@@ -51,6 +52,13 @@ Postgres と認証 API を Docker で動かし、サーバーとクライアン�
 
 ```bash
 supabase start
+```
+
+マッチメイキングは待ち行列とマッチチケット、ルームサーバーのレジストリを Redis に置きます。Supabase スタックには
+Redis が含まれないので、別途一つ起動します。
+
+```bash
+docker run -d --name sharpcampus-redis -p 6379:6379 redis:8
 ```
 
 プロフィールは同じ Postgres インスタンスにゲーム専用のテーブルとして保存します。PowerShell では次のように作成します。
@@ -80,7 +88,13 @@ docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/
 dotnet run --project src/SharpCampus.ApiServer
 ```
 
-コンソールクライアントから操作します。引数なしで実行すると REPL が起動します。
+もう一つターミナルを開いて対戦サーバーも起動します。
+
+```bash
+dotnet run --project src/SharpCampus.RoomServer
+```
+
+コンソールクライアントから両サーバーを操作します。引数なしで実行すると REPL が起動します。
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -91,6 +105,7 @@ cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
 cli> nickname boardsweeper
+cli> duel
 cli> logout
 ```
 
@@ -101,7 +116,13 @@ cli> logout
 アンダースコアだけの2〜16文字で、大文字と小文字を区別せずに比較するため、他のアカウントが使っている名前は指定できません。
 すべてのコマンドは単発の実行にも対応しています。たとえば `dotnet run --project src/SharpCampus.Cli -- whoami` のように使います。
 
-使い終わったら `supabase stop` でスタックを停止します。
+`duel` はマッチメイキングの待ち行列に入り、相手が現れるまで状態を問い合わせ続けます。ApiServer は二つのアカウントを
+組み合わせ、最も負荷の低いルームサーバーに部屋を用意するよう依頼し、各クライアントにその部屋のアドレスと寿命の短い
+入場トークンを返します。クライアントはそのアドレスに接続し、ランダムな入力で対戦を最後まで進めます。別々のアカウントで
+ログインしたクライアント二つから実行すると一試合を通して見られます。実際に遊べるクライアントができるまでの暫定的な
+コマンドです。
+
+使い終わったら `supabase stop` でスタックを停止し、`docker rm -f sharpcampus-redis` で Redis コンテナを片付けます。
 
 ## ライセンス
 

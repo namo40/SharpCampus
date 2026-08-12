@@ -17,6 +17,15 @@ public sealed class ValueObjectJsonTests
     }
 
     [Fact]
+    public void RoomId_SerializesAsTheUlidStringStructuredLogsShow()
+    {
+        var roomId = new RoomId(Ulid.NewUlid());
+
+        Assert.Equal($"\"{roomId.AsPrimitive()}\"", JsonSerializer.Serialize(roomId));
+        Assert.Equal(roomId, JsonSerializer.Deserialize<RoomId>(JsonSerializer.Serialize(roomId)));
+    }
+
+    [Fact]
     public void ValueObjects_RoundTripThroughJson()
     {
         var skinId = new SkinId("NEON");

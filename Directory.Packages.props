@@ -10,6 +10,7 @@
     <PackageVersion Include="LogicLooper" Version="1.6.0" />
     <PackageVersion Include="MagicOnion.Abstractions" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Client" Version="7.10.2" />
+    <PackageVersion Include="MagicOnion.Serialization.MessagePack" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Server" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Server.JsonTranscoding" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Server.JsonTranscoding.Swagger" Version="7.10.2" />
@@ -22,8 +23,11 @@
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.1.13" />
     <PackageVersion Include="System.CommandLine" Version="2.0.10" />
     <PackageVersion Include="System.Text.Json" Version="10.0.11" />
+    <PackageVersion Include="Ulid" Version="1.4.1" />
+    <PackageVersion Include="Ulid.MessagePack" Version="1.4.1" />
     <PackageVersion Include="UnitGenerator" Version="2.0.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />

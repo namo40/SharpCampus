@@ -1,31 +1,35 @@
 using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Values;
 using ZLogger;
 
 namespace SharpCampus.RoomServer.Rooms;
 
 internal static partial class RoomLog
 {
-    [ZLoggerMessage(LogLevel.Information, "Room {roomKey} created with seed {seed}")]
-    public static partial void RoomCreated(this ILogger logger, string roomKey, ulong seed);
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} created with seed {seed}")]
+    public static partial void RoomCreated(this ILogger logger, RoomId roomId, ulong seed);
 
-    [ZLoggerMessage(LogLevel.Information, "Room {roomKey} seated {playerIndex} as {displayName}")]
-    public static partial void RoomSeated(this ILogger logger, string roomKey, int playerIndex, string displayName);
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} seated {playerIndex} as {displayName}")]
+    public static partial void RoomSeated(this ILogger logger, RoomId roomId, int playerIndex, string displayName);
 
-    [ZLoggerMessage(LogLevel.Information, "Room {roomKey} starting in {countdownTicks} ticks")]
-    public static partial void RoomStarting(this ILogger logger, string roomKey, int countdownTicks);
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} starting in {countdownTicks} ticks")]
+    public static partial void RoomStarting(this ILogger logger, RoomId roomId, int countdownTicks);
 
-    [ZLoggerMessage(LogLevel.Information, "Room {roomKey} finished at tick {tick}: {outcome} by {reason}")]
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} finished at tick {tick}: {outcome} by {reason}")]
     public static partial void RoomFinished(
         this ILogger logger,
-        string roomKey,
+        RoomId roomId,
         int tick,
         DuelOutcome outcome,
         MatchEndReason reason);
 
-    [ZLoggerMessage(LogLevel.Information, "Room {roomKey} closed from {state}")]
-    public static partial void RoomClosed(this ILogger logger, string roomKey, RoomState state);
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} closed from {state}")]
+    public static partial void RoomClosed(this ILogger logger, RoomId roomId, RoomState state);
 
-    [ZLoggerMessage(LogLevel.Error, "Room {roomKey} stopped ticking")]
-    public static partial void RoomTickFaulted(this ILogger logger, Exception exception, string roomKey);
+    [ZLoggerMessage(LogLevel.Error, "Room {roomId} stopped ticking")]
+    public static partial void RoomTickFaulted(this ILogger logger, Exception exception, RoomId roomId);
+
+    [ZLoggerMessage(LogLevel.Information, "Registered {name} with {roomCount}/{capacity} rooms")]
+    public static partial void RoomServerRegistered(this ILogger logger, string name, int roomCount, int capacity);
 }

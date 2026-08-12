@@ -2,41 +2,51 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Cysharp.Threading;
+using Microsoft.Extensions.Options;
+using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.MasterData;
+using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.Values;
 
 namespace SharpCampus.RoomServer.Rooms;
 
-public sealed class RoomManager(ILogicLooperPool loopers, DuelRules rules, ILogger<RoomManager> logger)
+public sealed class RoomManager(
+    ILogicLooperPool loopers,
+    DuelRules rules,
+    IOptions<RoomServerOptions> options,
+    ILogger<RoomManager> logger)
 {
-    private readonly ConcurrentDictionary<string, DuelRoom> _rooms = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<RoomId, DuelRoom> _rooms = new();
 
-    // Creation registers a loop action, which must happen once per room; lookups stay lock free.
+    // Creation registers a loop action and has to respect the capacity it just read, so it is serialised;
+    // lookups stay lock free.
     private readonly Lock _createGate = new();
 
     internal int RoomCount => _rooms.Count;
 
-    internal DuelRoom GetOrCreate(string roomKey)
+    // Rooms only ever come into being through the ApiServer: there is no path from a client to a new room.
+    internal CreateRoomOutcome Create(RoomId roomId, RoomPlayer[] players)
     {
-        if (_rooms.TryGetValue(roomKey, out var existing) && !existing.IsClosed)
-        {
-            return existing;
-        }
-
         lock (_createGate)
         {
-            if (_rooms.TryGetValue(roomKey, out existing) && !existing.IsClosed)
+            if (_rooms.ContainsKey(roomId))
             {
-                return existing;
+                return CreateRoomOutcome.AlreadyExists;
             }
 
-            var room = new DuelRoom(roomKey, rules, NewSeed(), logger, Remove);
-            _rooms[roomKey] = room;
+            if (_rooms.Count >= options.Value.Capacity)
+            {
+                return CreateRoomOutcome.AtCapacity;
+            }
+
+            var room = new DuelRoom(roomId, players, rules, NewSeed(), logger, Remove);
+            _rooms[roomId] = room;
             _ = ObserveAsync(room, loopers.RegisterActionAsync((in _) => room.Tick()));
-            return room;
+            return CreateRoomOutcome.Created;
         }
     }
 
-    internal bool TryGet(string roomKey, out DuelRoom? room) => _rooms.TryGetValue(roomKey, out room);
+    internal bool TryGet(RoomId roomId, out DuelRoom? room) => _rooms.TryGetValue(roomId, out room);
 
     // Seeds are per room and server-side: both boards deal from it, so a client that knew it could
     // read the opponent's piece order.
@@ -58,11 +68,11 @@ public sealed class RoomManager(ILogicLooperPool loopers, DuelRules rules, ILogg
         }
         catch (Exception exception)
         {
-            logger.RoomTickFaulted(exception, room.RoomKey);
+            logger.RoomTickFaulted(exception, room.RoomId);
             room.Abort();
         }
     }
 
     private void Remove(DuelRoom room)
-        => _rooms.TryRemove(new KeyValuePair<string, DuelRoom>(room.RoomKey, room));
+        => _rooms.TryRemove(new KeyValuePair<RoomId, DuelRoom>(room.RoomId, room));
 }

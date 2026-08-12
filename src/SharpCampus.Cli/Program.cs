@@ -1,6 +1,11 @@
 using System.CommandLine.Parsing;
 using ConsoleAppFramework;
+using MagicOnion.Serialization;
+using SharpCampus.Shared.Serialization;
 using Spectre.Console;
+
+// Every client and hub this process creates has to read the same MessagePack shapes the servers write.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
 
 // Command classes register themselves through [RegisterCommands]; nothing is added by hand here.
 var app = ConsoleApp.Create();

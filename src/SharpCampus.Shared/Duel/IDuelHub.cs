@@ -9,9 +9,9 @@ namespace SharpCampus.Shared.Duel;
 public interface IDuelHub : IStreamingHub<IDuelHub, IDuelHubReceiver>
 {
     /// <summary>
-    /// Takes a seat in a room, creating the room if it is the first call for that key.
+    /// Takes the seat matchmaking reserved for the caller. The room already exists and already knows who belongs in it.
     /// </summary>
-    /// <param name="request">Room to join and the name to play under.</param>
+    /// <param name="request">Room to enter and the entry token that proves the caller belongs there.</param>
     /// <returns>The seat that was assigned, or a rejection when the room cannot take the caller.</returns>
     Task<JoinRoomResult> JoinAsync(JoinRoomRequest request);
 

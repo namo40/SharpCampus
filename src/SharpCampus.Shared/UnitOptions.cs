@@ -17,4 +17,14 @@ internal static class UnitOptions
 #else
         UnitGenerateOptions.MessagePackFormatter | UnitGenerateOptions.JsonConverter;
 #endif
+
+    // For values that travel and get logged but are not columns. The generated JSON converter hands off
+    // to the underlying type's own converter, and Ulid only ships one on .NET, so the Unity-facing build
+    // leaves JSON out rather than generating a converter that would throw the first time it ran.
+    public const UnitGenerateOptions Transported =
+#if NET10_0_OR_GREATER
+        UnitGenerateOptions.MessagePackFormatter | UnitGenerateOptions.JsonConverter;
+#else
+        UnitGenerateOptions.MessagePackFormatter;
+#endif
 }

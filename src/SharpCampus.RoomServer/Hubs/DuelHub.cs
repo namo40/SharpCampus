@@ -1,30 +1,43 @@
 using Grpc.Core;
 using MagicOnion.Server.Hubs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.JsonWebTokens;
 using SharpCampus.GameCore;
 using SharpCampus.RoomServer.Rooms;
+using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Identity;
 
 namespace SharpCampus.RoomServer.Hubs;
 
 // A thin adapter over the room mailbox: nothing here touches the simulation, and only the two calls
 // that owe the caller an answer wait for the loop to produce one.
-public sealed class DuelHub(RoomManager rooms) : StreamingHubBase<IDuelHub, IDuelHubReceiver>, IDuelHub
+[Authorize]
+public sealed class DuelHub(RoomManager rooms, EntryTokenService entryTokens)
+    : StreamingHubBase<IDuelHub, IDuelHubReceiver>, IDuelHub
 {
     private DuelRoom? _room;
     private int _playerIndex = -1;
 
     public async Task<JoinRoomResult> JoinAsync(JoinRoomRequest request)
     {
-        if (_room is not null)
+        // Entry is decided entirely from the token, the connection's identity and the room's seating
+        // plan, none of which the loop thread owns, so the mailbox only ever sees calls that passed.
+        if (_room is not null
+            || !entryTokens.TryValidate(request.EntryToken, out var tokenUserId, out var tokenRoomId)
+            || tokenRoomId != request.RoomId
+            || tokenUserId != CallerUserId()
+            || !rooms.TryGet(request.RoomId, out var room)
+            || room is null
+            || !room.IsExpected(tokenUserId))
         {
             return JoinRoomResult.Rejected;
         }
 
-        var room = rooms.GetOrCreate(request.RoomKey);
-        var group = await Group.AddAsync($"room:{request.RoomKey}");
+        var group = await Group.AddAsync($"room:{request.RoomId}");
 
         var completion = new TaskCompletionSource<JoinRoomResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var result = room.TryPost(RoomCommand.Join(request.DisplayName, group, completion))
+        var result = room.TryPost(RoomCommand.Join(tokenUserId, group, completion))
             ? await completion.Task
             : JoinRoomResult.Rejected;
 
@@ -76,4 +89,9 @@ public sealed class DuelHub(RoomManager rooms) : StreamingHubBase<IDuelHub, IDue
         _room?.TryPost(RoomCommand.Disconnect(_playerIndex));
         return default;
     }
+
+    // A hub call has no request scope of its own, so IUserContext cannot serve it: the principal comes
+    // off the HTTP/2 connection the hub was established on, which [Authorize] has already vetted.
+    private UserId CallerUserId() =>
+        UserId.Parse(Context.CallContext.GetHttpContext().User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
 }

@@ -3,6 +3,7 @@ using Grpc.Net.Client;
 using MagicOnion;
 using MagicOnion.Client;
 using Microsoft.AspNetCore.Mvc.Testing;
+using SharpCampus.Shared.Serialization;
 
 namespace SharpCampus.ApiServer.Tests;
 
@@ -20,7 +21,7 @@ internal sealed class MagicOnionTestClient : IDisposable
             new GrpcChannelOptions { HttpHandler = factory.Server.CreateHandler() });
         _channels.Add(channel);
 
-        var client = MagicOnionClient.Create<T>(channel);
+        var client = MagicOnionClient.Create<T>(channel, ContractSerialization.Provider);
 
         return token is null
             ? client

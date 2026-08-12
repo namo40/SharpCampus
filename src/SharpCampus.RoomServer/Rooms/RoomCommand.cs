@@ -1,6 +1,7 @@
 using MagicOnion.Server.Hubs;
 using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Identity;
 
 namespace SharpCampus.RoomServer.Rooms;
 
@@ -18,27 +19,27 @@ internal enum RoomCommandKind : byte
 internal readonly record struct RoomCommand(
     RoomCommandKind Kind,
     int PlayerIndex,
-    string? DisplayName,
+    UserId UserId,
     IGroup<IDuelHubReceiver>? Group,
     GameInput[]? Inputs,
     TaskCompletionSource<JoinRoomResult>? JoinCompletion,
     TaskCompletionSource<DuelSnapshot>? SnapshotCompletion)
 {
     public static RoomCommand Join(
-        string displayName,
+        UserId userId,
         IGroup<IDuelHubReceiver> group,
         TaskCompletionSource<JoinRoomResult> completion)
-        => new(RoomCommandKind.Join, -1, displayName, group, null, completion, null);
+        => new(RoomCommandKind.Join, -1, userId, group, null, completion, null);
 
     public static RoomCommand SendInputs(int playerIndex, GameInput[] inputs)
-        => new(RoomCommandKind.Inputs, playerIndex, null, null, inputs, null, null);
+        => new(RoomCommandKind.Inputs, playerIndex, default, null, inputs, null, null);
 
     public static RoomCommand Forfeit(int playerIndex)
-        => new(RoomCommandKind.Forfeit, playerIndex, null, null, null, null, null);
+        => new(RoomCommandKind.Forfeit, playerIndex, default, null, null, null, null);
 
     public static RoomCommand Disconnect(int playerIndex)
-        => new(RoomCommandKind.Disconnect, playerIndex, null, null, null, null, null);
+        => new(RoomCommandKind.Disconnect, playerIndex, default, null, null, null, null);
 
     public static RoomCommand Snapshot(TaskCompletionSource<DuelSnapshot> completion)
-        => new(RoomCommandKind.Snapshot, -1, null, null, null, null, completion);
+        => new(RoomCommandKind.Snapshot, -1, default, null, null, null, completion);
 }

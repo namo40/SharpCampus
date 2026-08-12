@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using NSubstitute;
 using SharpCampus.Server.Common.Data;
+using StackExchange.Redis;
 
 namespace SharpCampus.ApiServer.Tests;
 
@@ -38,6 +42,7 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.ConfigureTestServices(services =>
+        {
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {
                 options.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(
@@ -48,7 +53,13 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
                     });
 
                 options.TokenValidationParameters.ValidIssuer = Issuer;
-            }));
+            });
+
+            // Nothing under test here needs Redis, and the pairing worker is covered on its own, so the
+            // suite runs without the container the real server insists on.
+            services.RemoveAll<IHostedService>();
+            services.AddSingleton(Substitute.For<IConnectionMultiplexer>());
+        });
 
     protected override void Dispose(bool disposing)
     {

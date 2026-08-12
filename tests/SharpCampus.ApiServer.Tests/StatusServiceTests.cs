@@ -1,27 +1,18 @@
-using Grpc.Net.Client;
-using MagicOnion.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using SharpCampus.Shared.Services;
 using Xunit;
 
 namespace SharpCampus.ApiServer.Tests;
 
-public sealed class StatusServiceTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class StatusServiceTests(SupabaseTestFactory factory) : IClassFixture<SupabaseTestFactory>, IDisposable
 {
-    private readonly List<GrpcChannel> _channels = [];
+    private readonly MagicOnionTestClient _client = new();
 
-    public void Dispose()
-    {
-        foreach (var channel in _channels)
-        {
-            channel.Dispose();
-        }
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task GetStatusAsync_ReportsApiServerIdentity()
     {
-        var status = await CreateClient().GetStatusAsync();
+        var status = await _client.Create<IStatusService>(factory).GetStatusAsync();
 
         Assert.Equal("SharpCampus.ApiServer", status.ServerName);
         Assert.NotEmpty(status.Version);
@@ -31,18 +22,8 @@ public sealed class StatusServiceTests(WebApplicationFactory<Program> factory) :
     public async Task GetStatusAsync_ReportsCurrentUtcTime()
     {
         var before = DateTime.UtcNow;
-        var status = await CreateClient().GetStatusAsync();
+        var status = await _client.Create<IStatusService>(factory).GetStatusAsync();
 
         Assert.InRange(status.TimestampUtc, before, DateTime.UtcNow);
-    }
-
-    private IStatusService CreateClient()
-    {
-        var channel = GrpcChannel.ForAddress(
-            factory.Server.BaseAddress,
-            new GrpcChannelOptions { HttpHandler = factory.Server.CreateHandler() });
-        _channels.Add(channel);
-
-        return MagicOnionClient.Create<IStatusService>(channel);
     }
 }

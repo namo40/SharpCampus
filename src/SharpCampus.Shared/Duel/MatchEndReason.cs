@@ -13,4 +13,7 @@ public enum MatchEndReason : byte
 
     /// <summary>A player's connection dropped.</summary>
     Disconnect = 2,
+
+    /// <summary>The match never started and the room closed.</summary>
+    Aborted = 3,
 }

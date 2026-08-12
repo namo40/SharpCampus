@@ -3,6 +3,8 @@ using MagicOnion.Server.Hubs;
 using SharpCampus.GameCore;
 using SharpCampus.RoomServer.MasterData;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Identity;
+using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.Values;
 
 namespace SharpCampus.RoomServer.Rooms;
@@ -22,11 +24,12 @@ internal sealed class DuelRoom
 {
     private readonly ConcurrentQueue<RoomCommand> _commands = new();
     private readonly object _mailboxGate = new();
+    private readonly RoomPlayer[] _players;
     private readonly DuelRules _rules;
     private readonly ILogger _logger;
     private readonly Action<DuelRoom>? _onClosed;
     private readonly DuelSimulation _simulation;
-    private readonly string?[] _seats = new string?[2];
+    private readonly bool[] _seated = new bool[2];
     private readonly List<GameInput>[] _queuedInputs = [[], []];
     private readonly GameInput[][] _tickInputs;
 
@@ -34,25 +37,36 @@ internal sealed class DuelRoom
     private int _stateTicks;
     private volatile bool _closed;
 
-    public DuelRoom(string roomKey, DuelRules rules, ulong seed, ILogger logger, Action<DuelRoom>? onClosed = null)
+    public DuelRoom(
+        RoomId roomId,
+        RoomPlayer[] players,
+        DuelRules rules,
+        ulong seed,
+        ILogger logger,
+        Action<DuelRoom>? onClosed = null)
     {
-        RoomKey = roomKey;
+        RoomId = roomId;
+        _players = players;
         _rules = rules;
         _logger = logger;
         _onClosed = onClosed;
         _simulation = new DuelSimulation(rules.Simulation, seed);
         _tickInputs = [new GameInput[rules.InputPerTickMax], new GameInput[rules.InputPerTickMax]];
 
-        logger.RoomCreated(roomKey, seed);
+        logger.RoomCreated(roomId, seed);
     }
 
-    public string RoomKey { get; }
+    public RoomId RoomId { get; }
 
     public RoomState State { get; private set; } = RoomState.WaitingForPlayers;
 
     public bool IsClosed => _closed;
 
     public MatchResult? Result { get; private set; }
+
+    // The seating plan is fixed when the room is created and never mutated, so the hub may read it
+    // off its own thread to turn away anyone the room is not waiting for.
+    public bool IsExpected(UserId userId) => SeatOf(userId) >= 0;
 
     // Rejecting once the room is closing is what keeps a hub from awaiting a reply nobody will send.
     public bool TryPost(RoomCommand command)
@@ -97,6 +111,19 @@ internal sealed class DuelRoom
         return true;
     }
 
+    private int SeatOf(UserId userId)
+    {
+        for (var seat = 0; seat < _players.Length; seat++)
+        {
+            if (_players[seat].UserId == userId)
+            {
+                return seat;
+            }
+        }
+
+        return -1;
+    }
+
     private void DrainCommands()
     {
         while (_commands.TryDequeue(out var command))
@@ -124,21 +151,21 @@ internal sealed class DuelRoom
 
     private void HandleJoin(in RoomCommand command)
     {
-        if (State != RoomState.WaitingForPlayers)
+        var playerIndex = SeatOf(command.UserId);
+        if (State != RoomState.WaitingForPlayers || playerIndex < 0 || _seated[playerIndex])
         {
             command.JoinCompletion!.TrySetResult(JoinRoomResult.Rejected);
             return;
         }
 
-        var playerIndex = _seats[0] is null ? 0 : 1;
-        _seats[playerIndex] = command.DisplayName;
+        _seated[playerIndex] = true;
 
         // Both hubs resolve the same group instance from the same name, so the first one to arrive
         // gives the room everything it needs to broadcast.
         _group ??= command.Group;
-        _logger.RoomSeated(RoomKey, playerIndex, command.DisplayName!);
+        _logger.RoomSeated(RoomId, playerIndex, _players[playerIndex].DisplayName);
 
-        var waiting = _seats[1 - playerIndex] is null;
+        var waiting = !_seated[1 - playerIndex];
         command.JoinCompletion!.TrySetResult(new JoinRoomResult(true, new PlayerIndex(playerIndex), waiting));
 
         if (!waiting)
@@ -162,8 +189,8 @@ internal sealed class DuelRoom
             return;
         }
 
-        _seats[playerIndex] = null;
-        if (_seats[0] is null && _seats[1] is null)
+        _seated[playerIndex] = false;
+        if (!_seated[0] && !_seated[1])
         {
             State = RoomState.Closed;
         }
@@ -172,10 +199,20 @@ internal sealed class DuelRoom
     private void TickWaitingForPlayers()
     {
         _stateTicks++;
-        if (_stateTicks >= _rules.JoinTimeoutTicks)
+        if (_stateTicks < _rules.JoinTimeoutTicks)
         {
-            State = RoomState.Closed;
+            return;
         }
+
+        // Whoever did sit down is waiting on a match that will never start, and the only channel they
+        // are listening on is the one the match result comes down.
+        if (_seated[0] || _seated[1])
+        {
+            Result = new MatchResult(DuelOutcome.Draw, null, MatchEndReason.Aborted);
+            Everyone()?.OnMatchFinished(Result);
+        }
+
+        State = RoomState.Closed;
     }
 
     private void TickCountdown()
@@ -184,6 +221,11 @@ internal sealed class DuelRoom
         if (_stateTicks >= _rules.CountdownTicks)
         {
             _stateTicks = 0;
+
+            // Anything sent before the board was live is not part of the match, so the first playing
+            // tick must not consume a countdown's worth of queued moves.
+            _queuedInputs[0].Clear();
+            _queuedInputs[1].Clear();
             State = RoomState.Playing;
         }
     }
@@ -224,11 +266,14 @@ internal sealed class DuelRoom
         _stateTicks = 0;
 
         Everyone()?.OnMatchStarting(new MatchStartInfo(
-            [new MatchPlayerInfo(new PlayerIndex(0), _seats[0]!), new MatchPlayerInfo(new PlayerIndex(1), _seats[1]!)],
+            [
+                new MatchPlayerInfo(new PlayerIndex(0), _players[0].DisplayName),
+                new MatchPlayerInfo(new PlayerIndex(1), _players[1].DisplayName),
+            ],
             _rules.CountdownTicks,
             _rules.NextCount));
 
-        _logger.RoomStarting(RoomKey, _rules.CountdownTicks);
+        _logger.RoomStarting(RoomId, _rules.CountdownTicks);
     }
 
     private void Finish(DuelOutcome outcome, MatchEndReason reason)
@@ -236,7 +281,7 @@ internal sealed class DuelRoom
         State = RoomState.Finished;
         Result = new MatchResult(outcome, MatchResult.WinnerOf(outcome), reason);
         Everyone()?.OnMatchFinished(Result);
-        _logger.RoomFinished(RoomKey, _simulation.TickNumber, outcome, reason);
+        _logger.RoomFinished(RoomId, _simulation.TickNumber, outcome, reason);
     }
 
     private void Close()
@@ -257,7 +302,7 @@ internal sealed class DuelRoom
         }
 
         _onClosed?.Invoke(this);
-        _logger.RoomClosed(RoomKey, from);
+        _logger.RoomClosed(RoomId, from);
     }
 
     private DuelSnapshot CreateSnapshot()
@@ -279,6 +324,16 @@ internal sealed class DuelRoom
     }
 
     // Runs off the loop thread, and only once the loop action has died with an exception: nothing else
-    // can close this room any more, so whoever observed the fault does.
-    internal void Abort() => Close();
+    // can close this room any more, so whoever observed the fault ends the match for anyone still
+    // listening.
+    internal void Abort()
+    {
+        if (Result is null)
+        {
+            Result = new MatchResult(DuelOutcome.Draw, null, MatchEndReason.Aborted);
+            Everyone()?.OnMatchFinished(Result);
+        }
+
+        Close();
+    }
 }

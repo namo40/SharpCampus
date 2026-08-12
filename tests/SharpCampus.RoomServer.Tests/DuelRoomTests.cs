@@ -4,6 +4,7 @@ using SharpCampus.GameCore;
 using SharpCampus.RoomServer.MasterData;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Values;
 using Xunit;
 
@@ -13,19 +14,21 @@ public class DuelRoomTests
 {
     private const ulong Seed = 0x5EEDUL;
 
+    private static readonly RoomId _roomId = new(Ulid.NewUlid());
+
     [Fact]
-    public void SecondJoin_StartsTheCountdownAndThenTheMatch()
+    public void EachAccountTakesTheSeatItWasGiven()
     {
         var receiver = new RecordingReceiver();
         var group = RoomFixture.Group(receiver);
-        var rules = RoomFixture.Rules(countdownTicks: 3);
-        var room = CreateRoom(rules);
+        var room = CreateRoom(RoomFixture.Rules(countdownTicks: 3));
 
-        var first = room.Join(group, "one");
-        var second = room.Join(group, "two");
+        // The second account joins first, and still lands in the seat the room reserved for it.
+        var second = room.Join(group, RoomFixture.SecondUser);
+        var first = room.Join(group, RoomFixture.FirstUser);
 
-        Assert.Equal(new JoinRoomResult(true, new PlayerIndex(0), WaitingForOpponent: true), first);
-        Assert.Equal(new JoinRoomResult(true, new PlayerIndex(1), WaitingForOpponent: false), second);
+        Assert.Equal(new JoinRoomResult(true, new PlayerIndex(1), WaitingForOpponent: true), second);
+        Assert.Equal(new JoinRoomResult(true, new PlayerIndex(0), WaitingForOpponent: false), first);
         Assert.Equal(RoomState.Countdown, room.State);
 
         var starting = Assert.Single(receiver.Started);
@@ -40,15 +43,24 @@ public class DuelRoomTests
     }
 
     [Fact]
-    public void ThirdJoin_IsRejected()
+    public void AccountTheRoomIsNotWaitingFor_IsTurnedAway()
     {
         var group = RoomFixture.Group(new RecordingReceiver());
         var room = CreateRoom(RoomFixture.Rules());
 
-        room.Join(group, "one");
-        room.Join(group, "two");
+        Assert.Equal(JoinRoomResult.Rejected, room.Join(group, new UserId(Guid.NewGuid())));
+        Assert.False(room.IsExpected(new UserId(Guid.NewGuid())));
+    }
 
-        Assert.Equal(JoinRoomResult.Rejected, room.Join(group, "three"));
+    [Fact]
+    public void SecondJoinFromTheSameAccount_IsTurnedAway()
+    {
+        var group = RoomFixture.Group(new RecordingReceiver());
+        var room = CreateRoom(RoomFixture.Rules());
+
+        room.Join(group, RoomFixture.FirstUser);
+
+        Assert.Equal(JoinRoomResult.Rejected, room.Join(group, RoomFixture.FirstUser));
     }
 
     [Fact]
@@ -86,11 +98,22 @@ public class DuelRoomTests
             room.Tick();
         }
 
-        var locks = receiver.Deltas
-            .SelectMany(delta => delta.Events)
-            .Count(duelEvent => duelEvent.Kind == TickEventKind.PieceLocked);
+        Assert.Equal(1, LockCount(receiver));
+    }
 
-        Assert.Equal(1, locks);
+    [Fact]
+    public void InputsSentDuringTheCountdown_DoNotSurviveIntoTheMatch()
+    {
+        var receiver = new RecordingReceiver();
+        var room = SeatedRoom(receiver, RoomFixture.Rules(countdownTicks: 3));
+
+        Assert.Equal(RoomState.Countdown, room.State);
+        room.TryPost(RoomCommand.SendInputs(0, [GameInput.HardDrop, GameInput.HardDrop]));
+
+        room.TickToPlaying();
+        room.Tick();
+
+        Assert.Equal(0, LockCount(receiver));
     }
 
     [Fact]
@@ -127,44 +150,32 @@ public class DuelRoomTests
     }
 
     [Fact]
-    public void FinishAfterBothPlayersVanished_StillClosesTheRoom()
-    {
-        var group = RoomFixture.Group(new RecordingReceiver());
-        var room = CreateRoom(RoomFixture.Rules());
-        room.Join(group, "one");
-        room.Join(group, "two");
-        room.TickToPlaying();
-
-        // Both connections die and take the group with them before the room hears about either seat.
-        group.All.Returns(_ => throw new ObjectDisposedException("group"));
-        room.TryPost(RoomCommand.Forfeit(0));
-
-        Assert.False(room.Tick());
-        Assert.True(room.IsClosed);
-    }
-
-    [Fact]
-    public void AbortedRoom_IsClosedForGood()
-    {
-        var room = SeatedRoom(new RecordingReceiver(), RoomFixture.Rules()).TickToPlaying();
-
-        room.Abort();
-
-        Assert.True(room.IsClosed);
-        Assert.False(room.TryPost(RoomCommand.Forfeit(0)));
-    }
-
-    [Fact]
-    public void UnfilledRoom_ClosesOnceTheJoinTimeoutElapses()
+    public void JoinTimeout_TellsTheWaitingPlayerTheMatchWasAbandoned()
     {
         var receiver = new RecordingReceiver();
         var room = CreateRoom(RoomFixture.Rules(joinTimeoutTicks: 3));
-        room.Join(RoomFixture.Group(receiver), "alone");
+        room.Join(RoomFixture.Group(receiver), RoomFixture.FirstUser);
 
         Assert.True(room.Tick());
         Assert.False(room.Tick());
         Assert.Equal(RoomState.Closed, room.State);
         Assert.Empty(receiver.Started);
+
+        var result = Assert.Single(receiver.Finished);
+        Assert.Equal(DuelOutcome.Draw, result.Outcome);
+        Assert.Null(result.WinnerPlayerIndex);
+        Assert.Equal(MatchEndReason.Aborted, result.Reason);
+    }
+
+    [Fact]
+    public void JoinTimeout_WithNobodySeatedTellsNobody()
+    {
+        var receiver = new RecordingReceiver();
+        var room = CreateRoom(RoomFixture.Rules(joinTimeoutTicks: 2));
+
+        Assert.True(room.Tick());
+        Assert.False(room.Tick());
+        Assert.Empty(receiver.Finished);
     }
 
     [Fact]
@@ -174,7 +185,7 @@ public class DuelRoomTests
 
         var completion = new TaskCompletionSource<JoinRoomResult>();
         room.TryPost(RoomCommand.Forfeit(0));
-        room.TryPost(RoomCommand.Join("late", RoomFixture.Group(new RecordingReceiver()), completion));
+        room.TryPost(RoomCommand.Join(RoomFixture.FirstUser, RoomFixture.Group(new RecordingReceiver()), completion));
         room.Tick();
 
         Assert.Equal(JoinRoomResult.Rejected, await completion.Task);
@@ -197,15 +208,51 @@ public class DuelRoomTests
         Assert.Equal(5, snapshot.Players[0].Next.Length);
     }
 
+    private static int LockCount(RecordingReceiver receiver) => receiver.Deltas
+        .SelectMany(delta => delta.Events)
+        .Count(duelEvent => duelEvent.Kind == TickEventKind.PieceLocked);
+
+    [Fact]
+    public void FinishAfterBothPlayersVanished_StillClosesTheRoom()
+    {
+        var group = RoomFixture.Group(new RecordingReceiver());
+        var room = CreateRoom(RoomFixture.Rules());
+        room.Join(group, RoomFixture.FirstUser);
+        room.Join(group, RoomFixture.SecondUser);
+        room.TickToPlaying();
+
+        // Both connections die and take the group with them before the room hears about either seat.
+        group.All.Returns(_ => throw new ObjectDisposedException("group"));
+        room.TryPost(RoomCommand.Forfeit(0));
+
+        Assert.False(room.Tick());
+        Assert.True(room.IsClosed);
+    }
+
+    [Fact]
+    public void AbortedRoom_EndsInAnAbortedDrawForWhoeverStillListens()
+    {
+        var receiver = new RecordingReceiver();
+        var room = SeatedRoom(receiver, RoomFixture.Rules()).TickToPlaying();
+        room.Tick();
+
+        room.Abort();
+
+        Assert.True(room.IsClosed);
+        var result = Assert.Single(receiver.Finished);
+        Assert.Equal(DuelOutcome.Draw, result.Outcome);
+        Assert.Equal(MatchEndReason.Aborted, result.Reason);
+    }
+
     private static DuelRoom CreateRoom(DuelRules rules)
-        => new("room", rules, Seed, NullLogger.Instance);
+        => new(_roomId, RoomFixture.Players(), rules, Seed, NullLogger.Instance);
 
     private static DuelRoom SeatedRoom(RecordingReceiver receiver, DuelRules rules)
     {
         var group = RoomFixture.Group(receiver);
         var room = CreateRoom(rules);
-        room.Join(group, "one");
-        room.Join(group, "two");
+        room.Join(group, RoomFixture.FirstUser);
+        room.Join(group, RoomFixture.SecondUser);
         return room;
     }
 }

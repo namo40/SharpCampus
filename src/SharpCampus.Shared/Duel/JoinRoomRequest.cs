@@ -1,13 +1,14 @@
 using MessagePack;
+using SharpCampus.Shared.Values;
 
 namespace SharpCampus.Shared.Duel;
 
 /// <summary>
-/// Asks to be seated in a duel room.
+/// Asks to be seated in a duel room the caller was matched into.
 /// </summary>
-/// <param name="RoomKey">Room to join. The first caller for a key creates the room.</param>
-/// <param name="DisplayName">Name shown to the opponent for the length of the match.</param>
+/// <param name="RoomId">Room to enter, as issued in the match ticket.</param>
+/// <param name="EntryToken">Signed proof from the match ticket that this account belongs in that room.</param>
 [MessagePackObject]
 public sealed record JoinRoomRequest(
-    [property: Key(0)] string RoomKey,
-    [property: Key(1)] string DisplayName);
+    [property: Key(0)] RoomId RoomId,
+    [property: Key(1)] string EntryToken);

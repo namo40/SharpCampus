@@ -1,12 +1,11 @@
-using Grpc.Net.Client;
 using MagicOnion.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
+using SharpCampus.Shared.Serialization;
 using SharpCampus.Shared.Services;
 using Xunit;
 
 namespace SharpCampus.RoomServer.Tests;
 
-public sealed class StatusServiceTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class StatusServiceTests(RoomServerTestFactory factory) : IClassFixture<RoomServerTestFactory>
 {
     [Fact]
     public async Task GetStatusAsync_ReportsRoomServerIdentity()
@@ -27,11 +26,5 @@ public sealed class StatusServiceTests(WebApplicationFactory<Program> factory) :
     }
 
     private IStatusService CreateClient()
-    {
-        var channel = GrpcChannel.ForAddress(
-            factory.Server.BaseAddress,
-            new GrpcChannelOptions { HttpHandler = factory.Server.CreateHandler() });
-
-        return MagicOnionClient.Create<IStatusService>(channel);
-    }
+        => MagicOnionClient.Create<IStatusService>(factory.CreateChannel(), ContractSerialization.Provider);
 }

@@ -42,7 +42,9 @@ dotnet build
 dotnet test
 ```
 
-The test suite is self-contained — it needs neither Docker nor a running Supabase stack.
+The test suite is self-contained — it needs neither Docker nor a running Supabase stack. The tests that
+exercise the Redis adapters skip themselves when nothing is listening on `localhost:6379`, and run when
+the container below is up.
 
 ## Quick start
 
@@ -51,6 +53,13 @@ Postgres and the auth API in Docker, and prints the URL and keys the servers and
 
 ```bash
 supabase start
+```
+
+Matchmaking keeps its queue, its match tickets and the room server registry in Redis, which the Supabase
+stack does not include. Run one alongside it:
+
+```bash
+docker run -d --name sharpcampus-redis -p 6379:6379 redis:8
 ```
 
 Profiles live in the same Postgres instance, in tables of the game's own. Create them with PowerShell:
@@ -80,7 +89,13 @@ Start the meta-game server:
 dotnet run --project src/SharpCampus.ApiServer
 ```
 
-And drive it from the console client, which starts a REPL when you pass no arguments:
+and the match server, in a second terminal:
+
+```bash
+dotnet run --project src/SharpCampus.RoomServer
+```
+
+Then drive them from the console client, which starts a REPL when you pass no arguments:
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -91,6 +106,7 @@ cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
 cli> nickname boardsweeper
+cli> duel
 cli> logout
 ```
 
@@ -101,7 +117,14 @@ derived from the account id. `nickname` renames it: 2 to 16 letters, digits or u
 and compared case-insensitively. Every command also works as a one-shot invocation, for example
 `dotnet run --project src/SharpCampus.Cli -- whoami`.
 
-Stop the stack with `supabase stop` when you are done.
+`duel` joins the matchmaking queue and polls until an opponent turns up. The ApiServer pairs the two
+accounts, asks the least loaded room server to stand up a room for them, and answers each client with
+that room's address and a short-lived entry token; the client connects there and plays the match out
+with random inputs. Run it from two clients signed in as different accounts to see a match through. It
+stands in for the real, playable client.
+
+Stop the stack with `supabase stop` and the Redis container with `docker rm -f sharpcampus-redis` when
+you are done.
 
 ## License
 

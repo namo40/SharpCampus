@@ -1,6 +1,7 @@
 using MessagePack;
 using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.Serialization;
 using SharpCampus.Shared.Values;
 using Xunit;
 
@@ -9,7 +10,8 @@ namespace SharpCampus.Shared.Tests;
 public class DuelContractSerializationTests
 {
     [Fact]
-    public void JoinRoomRequest_RoundTrips() => AssertRoundTrip(new JoinRoomRequest("lobby-1", "player"));
+    public void JoinRoomRequest_RoundTrips()
+        => AssertRoundTrip(new JoinRoomRequest(new RoomId(Ulid.NewUlid()), "payload.signature"));
 
     [Fact]
     public void JoinRoomResult_RoundTrips() => AssertRoundTrip(new JoinRoomResult(true, new PlayerIndex(1), false));
@@ -85,5 +87,8 @@ public class DuelContractSerializationTests
 
     private static void AssertRoundTrip<T>(T value) => Assert.Equal(value, Roundtrip(value));
 
-    private static T Roundtrip<T>(T value) => MessagePackSerializer.Deserialize<T>(MessagePackSerializer.Serialize(value));
+    // The contract options, not the standard ones: RoomId wraps a Ulid the standard resolver cannot format.
+    private static T Roundtrip<T>(T value) => MessagePackSerializer.Deserialize<T>(
+        MessagePackSerializer.Serialize(value, ContractSerialization.Options),
+        ContractSerialization.Options);
 }

@@ -1,0 +1,218 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+using SharpCampus.ApiServer.Matchmaking;
+using SharpCampus.Server.Common.Configuration;
+using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.Rooms;
+using SharpCampus.Server.Common.Security;
+using SharpCampus.Shared.Dtos;
+using SharpCampus.Shared.Identity;
+using SharpCampus.Shared.Internal.Rooms;
+using Xunit;
+
+namespace SharpCampus.ApiServer.Tests;
+
+public class MatchmakingWorkerTests
+{
+    private static readonly UserId _first = new(Guid.NewGuid());
+    private static readonly UserId _second = new(Guid.NewGuid());
+    private static readonly UserId _third = new(Guid.NewGuid());
+    private static readonly UserId _fourth = new(Guid.NewGuid());
+
+    private static readonly RoomServerEntry _server =
+        new("room-0", "http://localhost:5002", "http://localhost:5002", 0, 100);
+
+    private readonly IPairingLock _pairingLock = Substitute.For<IPairingLock>();
+    private readonly IMatchQueue _queue = Substitute.For<IMatchQueue>();
+    private readonly ITicketStore _tickets = Substitute.For<ITicketStore>();
+    private readonly IRoomRegistry _registry = Substitute.For<IRoomRegistry>();
+    private readonly IRoomControlClient _roomControl = Substitute.For<IRoomControlClient>();
+    private readonly IProfileRepository _profiles = Substitute.For<IProfileRepository>();
+    private readonly List<UserId> _waiting = [];
+
+    public MatchmakingWorkerTests()
+    {
+        _pairingLock.TryAcquireAsync().Returns(true);
+        _registry.FindLeastLoadedAsync().Returns(_server);
+        _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>()).Returns(CreateRoomResult.Created);
+        _profiles.GetAsync(_first).Returns(new Profile(_first, "alpha"));
+        _profiles.GetAsync(_second).Returns(new Profile(_second, "beta"));
+
+        // A queue that only gives up its members when the worker confirms the pairing, which is the
+        // behaviour the whole peek-then-remove model rests on.
+        _queue.PeekPairAsync().Returns(_ => _waiting.Count < 2 ? null : (_waiting[0], _waiting[1]));
+        _queue.When(queue => queue.RemoveAsync(Arg.Any<UserId>()))
+            .Do(call => _waiting.Remove(call.Arg<UserId>()));
+    }
+
+    [Fact]
+    public async Task TwoWaitingPlayers_AreGivenARoomAndATicketEach()
+    {
+        QueueHolds(_first, _second);
+
+        await CreateWorker().PairAsync();
+
+        var request = (CreateRoomRequest)_roomControl.ReceivedCalls().Single().GetArguments()[1]!;
+        Assert.Equal([_first, _second], request.Players.Select(player => player.UserId));
+        Assert.Equal(["alpha", "beta"], request.Players.Select(player => player.DisplayName));
+
+        await _tickets.Received(1).StoreAsync(_first, Arg.Is<MatchTicket>(ticket => ticket.RoomId == request.RoomId));
+        await _tickets.Received(1).StoreAsync(_second, Arg.Is<MatchTicket>(ticket => ticket.RoomId == request.RoomId));
+
+        Assert.Empty(_waiting);
+    }
+
+    [Fact]
+    public async Task PairedPlayers_KeepTheirPlaceInTheQueueUntilBothTicketsExist()
+    {
+        QueueHolds(_first, _second);
+
+        await CreateWorker().PairAsync();
+
+        // A client polling between these calls has to find a ticket or a queue place, never neither.
+        Received.InOrder(() =>
+        {
+            _tickets.StoreAsync(_first, Arg.Any<MatchTicket>());
+            _tickets.StoreAsync(_second, Arg.Any<MatchTicket>());
+            _queue.RemoveAsync(_first);
+            _queue.RemoveAsync(_second);
+        });
+    }
+
+    [Fact]
+    public async Task Ticket_CarriesTheChosenServerAndATokenThatServerAccepts()
+    {
+        QueueHolds(_first, _second);
+
+        await CreateWorker().PairAsync();
+
+        var issued = StoredTickets().ToList();
+        Assert.Equal([_first, _second], issued.Select(entry => entry.UserId));
+
+        foreach (var (userId, ticket) in issued)
+        {
+            Assert.Equal(_server.ClientEndpoint, ticket.Endpoint);
+            Assert.True(EntryTokens().TryValidate(ticket.EntryToken, out var signedUser, out var signedRoom));
+            Assert.Equal(userId, signedUser);
+            Assert.Equal(ticket.RoomId, signedRoom);
+        }
+    }
+
+    [Fact]
+    public async Task EveryWaitingPair_IsPlacedInTheSamePass()
+    {
+        QueueHolds(_first, _second, _third, _fourth);
+
+        await CreateWorker().PairAsync();
+
+        Assert.Equal(2, _roomControl.ReceivedCalls().Count());
+        Assert.Empty(_waiting);
+    }
+
+    [Fact]
+    public async Task LonePlayer_StaysInTheQueue()
+    {
+        QueueHolds(_first);
+
+        await CreateWorker().PairAsync();
+
+        Assert.Equal([_first], _waiting);
+        await _roomControl.DidNotReceive().CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>());
+    }
+
+    [Fact]
+    public async Task RoomServerThatRefuses_LeavesThePairQueuedForTheNextPass()
+    {
+        QueueHolds(_first, _second);
+        _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>())
+            .Returns(new CreateRoomResult(CreateRoomOutcome.AtCapacity));
+
+        await CreateWorker().PairAsync();
+
+        Assert.Equal([_first, _second], _waiting);
+        await _tickets.DidNotReceive().StoreAsync(Arg.Any<UserId>(), Arg.Any<MatchTicket>());
+
+        // The pass gives up on the pair rather than retrying it: the timer is what paces the retry.
+        Assert.Single(_roomControl.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task UnreachableRoomServer_LeavesThePairQueuedForTheNextPass()
+    {
+        QueueHolds(_first, _second);
+        _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>()).Returns((CreateRoomResult?)null);
+
+        await CreateWorker().PairAsync();
+
+        Assert.Equal([_first, _second], _waiting);
+        await _tickets.DidNotReceive().StoreAsync(Arg.Any<UserId>(), Arg.Any<MatchTicket>());
+        Assert.Single(_roomControl.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task NoRegisteredRoomServer_LeavesThePairQueuedForTheNextPass()
+    {
+        QueueHolds(_first, _second);
+        _registry.FindLeastLoadedAsync().Returns((RoomServerEntry?)null);
+
+        await CreateWorker().PairAsync();
+
+        Assert.Equal([_first, _second], _waiting);
+        Assert.Single(_registry.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task AnotherInstanceHoldingTheLock_StopsThisOneFromTouchingTheQueue()
+    {
+        QueueHolds(_first, _second);
+        _pairingLock.TryAcquireAsync().Returns(false);
+
+        await CreateWorker().PairAsync();
+
+        await _queue.DidNotReceive().PeekPairAsync();
+        await _pairingLock.DidNotReceive().ReleaseAsync();
+    }
+
+    [Fact]
+    public async Task PairingLock_IsReleasedOnceThePassIsDone()
+    {
+        QueueHolds(_first, _second);
+
+        await CreateWorker().PairAsync();
+
+        await _pairingLock.Received(1).ReleaseAsync();
+    }
+
+    private void QueueHolds(params UserId[] waiting) => _waiting.AddRange(waiting);
+
+    private IEnumerable<(UserId UserId, MatchTicket Ticket)> StoredTickets() => _tickets.ReceivedCalls()
+        .Where(call => call.GetMethodInfo().Name == nameof(ITicketStore.StoreAsync))
+        .Select(call => ((UserId)call.GetArguments()[0]!, (MatchTicket)call.GetArguments()[1]!));
+
+    private static EntryTokenService EntryTokens()
+        => new(Options.Create(new EntryTokenOptions { Secret = "test-secret" }), TimeProvider.System);
+
+    private MatchmakingWorker CreateWorker()
+    {
+        var provider = Substitute.For<IServiceProvider>();
+        provider.GetService(typeof(IProfileRepository)).Returns(_profiles);
+
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.Returns(provider);
+
+        var scopes = Substitute.For<IServiceScopeFactory>();
+        scopes.CreateScope().Returns(scope);
+
+        return new MatchmakingWorker(
+            _pairingLock,
+            _queue,
+            _tickets,
+            _registry,
+            _roomControl,
+            EntryTokens(),
+            scopes,
+            NullLogger<MatchmakingWorker>.Instance);
+    }
+}

@@ -42,7 +42,8 @@ dotnet build
 dotnet test
 ```
 
-테스트는 그 자체로 완결되어 있어서 Docker나 Supabase 스택이 없어도 실행됩니다.
+테스트는 그 자체로 완결되어 있어서 Docker나 Supabase 스택이 없어도 실행됩니다. Redis 어댑터를 검증하는 테스트는
+`localhost:6379`에 아무것도 없으면 스스로 건너뛰고, 아래의 컨테이너가 떠 있으면 실행됩니다.
 
 ## 빠르게 시작하기
 
@@ -51,6 +52,13 @@ Docker로 실행하고, 서버와 클라이언트가 사용하는 URL과 키를 
 
 ```bash
 supabase start
+```
+
+매치메이킹은 대기열과 매치 티켓, 룸 서버 레지스트리를 Redis에 둡니다. Supabase 스택에는 Redis가 없으므로 따로 하나
+띄웁니다.
+
+```bash
+docker run -d --name sharpcampus-redis -p 6379:6379 redis:8
 ```
 
 프로필은 같은 Postgres 인스턴스 안에 게임 전용 테이블로 저장합니다. PowerShell에서는 이렇게 만듭니다.
@@ -79,7 +87,13 @@ docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/
 dotnet run --project src/SharpCampus.ApiServer
 ```
 
-콘솔 클라이언트로 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
+터미널을 하나 더 열어 대전 서버도 실행합니다.
+
+```bash
+dotnet run --project src/SharpCampus.RoomServer
+```
+
+콘솔 클라이언트로 두 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -90,6 +104,7 @@ cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
 cli> nickname boardsweeper
+cli> duel
 cli> logout
 ```
 
@@ -99,7 +114,12 @@ ApiServer에 보내고, 서버는 토큰을 검증한 뒤 어떤 계정인지와
 영문자와 숫자, 밑줄만 써서 2~16자로 지어야 하고, 대소문자를 구분하지 않고 비교하므로 다른 계정이 이미 쓰는 이름은 쓸 수
 없습니다. 모든 명령은 한 번만 실행하는 형태로도 쓸 수 있습니다. 예를 들면 `dotnet run --project src/SharpCampus.Cli -- whoami`처럼 씁니다.
 
-다 사용했으면 `supabase stop`으로 스택을 내립니다.
+`duel`은 매치메이킹 대기열에 들어가서 상대가 나타날 때까지 상태를 확인합니다. ApiServer는 두 계정을 짝지어 부하가 가장
+낮은 룸 서버에 방을 만들라고 요청하고, 각 클라이언트에 그 방의 주소와 수명이 짧은 입장 토큰을 응답합니다. 클라이언트는
+그 주소로 접속해 무작위 입력으로 대전을 끝까지 진행합니다. 서로 다른 계정으로 로그인한 클라이언트 두 개에서 실행하면
+한 판을 볼 수 있습니다. 실제로 플레이할 수 있는 클라이언트가 나오기 전까지 쓰는 임시 명령입니다.
+
+다 사용했으면 `supabase stop`으로 스택을 내리고, `docker rm -f sharpcampus-redis`로 Redis 컨테이너를 정리합니다.
 
 ## 라이선스
 
