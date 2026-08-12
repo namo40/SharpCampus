@@ -27,4 +27,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The duel contract speaks the simulation's own enums, and the client-side replica replays its
+         events, so the pure netstandard2.1 simulation travels with the contracts. -->
+    <ProjectReference Include="..\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.83.0" />
+    <PackageVersion Include="LogicLooper" Version="1.6.0" />
     <PackageVersion Include="MagicOnion.Abstractions" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Client" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Server" Version="7.10.2" />
