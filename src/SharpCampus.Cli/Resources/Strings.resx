@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="BoardHeaderRival" xml:space="preserve">
+    <value>RIVAL</value>
+  </data>
+  <data name="BoardHeaderYou" xml:space="preserve">
+    <value>YOU</value>
+  </data>
+  <data name="HudCombo" xml:space="preserve">
+    <value>COMBO</value>
+  </data>
+  <data name="HudGarbage" xml:space="preserve">
+    <value>GARBAGE</value>
+  </data>
+  <data name="HudHold" xml:space="preserve">
+    <value>HOLD</value>
+  </data>
+  <data name="HudLevel" xml:space="preserve">
+    <value>LV</value>
+  </data>
+  <data name="HudNext" xml:space="preserve">
+    <value>NEXT</value>
+  </data>
+  <data name="KeyMap" xml:space="preserve">
+    <value>Move ←/→   Soft drop ↓   Rotate Z/X   Hard drop Space   Hold C   Forfeit Q</value>
+  </data>
+  <data name="LoggedIn" xml:space="preserve">
+    <value>Logged in as {0}.</value>
+  </data>
+  <data name="LoggedOut" xml:space="preserve">
+    <value>Logged out.</value>
+  </data>
+  <data name="LoginFailed" xml:space="preserve">
+    <value>Login failed: {0}</value>
+  </data>
+  <data name="Matched" xml:space="preserve">
+    <value>Matched into {0} on {1}.</value>
+  </data>
+  <data name="NicknameRejected" xml:space="preserve">
+    <value>The server rejected {0}.</value>
+  </data>
+  <data name="NicknameRule" xml:space="preserve">
+    <value>Nicknames are {0} to {1} letters, digits or underscores.</value>
+  </data>
+  <data name="NicknameTaken" xml:space="preserve">
+    <value>{0} is already taken.</value>
+  </data>
+  <data name="NicknameUpdated" xml:space="preserve">
+    <value>Nickname is now {0}.</value>
+  </data>
+  <data name="NotLoggedIn" xml:space="preserve">
+    <value>Not logged in. Run: login &lt;email&gt; &lt;password&gt;</value>
+  </data>
+  <data name="NotLoggedInShort" xml:space="preserve">
+    <value>Not logged in.</value>
+  </data>
+  <data name="OpponentNeverArrived" xml:space="preserve">
+    <value>The opponent never arrived.</value>
+  </data>
+  <data name="ProfileSummary" xml:space="preserve">
+    <value>{0} coins, rating {1}</value>
+  </data>
+  <data name="Queued" xml:space="preserve">
+    <value>Queued. Waiting for an opponent...</value>
+  </data>
+  <data name="QueueLeft" xml:space="preserve">
+    <value>Left the queue.</value>
+  </data>
+  <data name="QueueReleased" xml:space="preserve">
+    <value>The queue let you go without a match. Try again.</value>
+  </data>
+  <data name="ReasonAborted" xml:space="preserve">
+    <value>abandoned</value>
+  </data>
+  <data name="ReasonDisconnect" xml:space="preserve">
+    <value>disconnect</value>
+  </data>
+  <data name="ReasonForfeit" xml:space="preserve">
+    <value>forfeit</value>
+  </data>
+  <data name="ReasonTopOut" xml:space="preserve">
+    <value>top out</value>
+  </data>
+  <data name="ReplBanner" xml:space="preserve">
+    <value>SharpCampus client. Type 'exit' to quit.</value>
+  </data>
+  <data name="ReplicaStats" xml:space="preserve">
+    <value>Replica tick {0}, missed ticks: {1}</value>
+  </data>
+  <data name="ResultAbandoned" xml:space="preserve">
+    <value>Match abandoned</value>
+  </data>
+  <data name="ResultDraw" xml:space="preserve">
+    <value>Draw</value>
+  </data>
+  <data name="ResultLose" xml:space="preserve">
+    <value>You lose</value>
+  </data>
+  <data name="ResultWin" xml:space="preserve">
+    <value>You win</value>
+  </data>
+  <data name="Seated" xml:space="preserve">
+    <value>Seated as player {0}.</value>
+  </data>
+  <data name="SeatRejected" xml:space="preserve">
+    <value>Room {0} would not seat you.</value>
+  </data>
+  <data name="ServerUnreachable" xml:space="preserve">
+    <value>{0}: unreachable at {1}</value>
+  </data>
+  <data name="ServerUnreachableDetail" xml:space="preserve">
+    <value>Server unreachable: {0}</value>
+  </data>
+  <data name="ServerVersionLine" xml:space="preserve">
+    <value>{0} (UTC {1:O})</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Session expired or invalid. Run: login &lt;email&gt; &lt;password&gt;</value>
+  </data>
+  <data name="SignedUp" xml:space="preserve">
+    <value>Signed up as {0}.</value>
+  </data>
+  <data name="SignUpFailed" xml:space="preserve">
+    <value>Sign-up failed: {0}</value>
+  </data>
+  <data name="StateFinished" xml:space="preserve">
+    <value>Match over</value>
+  </data>
+  <data name="StateGetReady" xml:space="preserve">
+    <value>Get ready...</value>
+  </data>
+  <data name="WaitingForOpponent" xml:space="preserve">
+    <value>Waiting for the opponent...</value>
+  </data>
+  <data name="WindowTooSmall" xml:space="preserve">
+    <value>The console window is smaller than {0}x{1}. The frame may wrap.</value>
+  </data>
+</root>

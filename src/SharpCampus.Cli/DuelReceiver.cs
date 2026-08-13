@@ -1,11 +1,10 @@
-using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
-using Spectre.Console;
 
 namespace SharpCampus.Cli;
 
 // Everything a duel room pushes arrives on the hub's receive loop, while the command thread applies
-// the snapshot it asked for; the lock is what keeps those two off each other's replica.
+// the snapshot it asked for and the render loop reads the boards; the lock is what keeps all three
+// off each other's replica.
 internal sealed class DuelReceiver : IDuelHubReceiver
 {
     private readonly Lock _gate = new();
@@ -26,6 +25,16 @@ internal sealed class DuelReceiver : IDuelHubReceiver
         }
     }
 
+    // Readers run under the same gate as the receive loop, so a caller never sees a board that is
+    // half way through a tick. Whatever runs here has to stay short for the same reason.
+    public TResult Read<TState, TResult>(TState state, Func<TState, DuelReplica, TResult> read)
+    {
+        lock (_gate)
+        {
+            return read(state, Replica);
+        }
+    }
+
     public void OnMatchStarting(MatchStartInfo info)
     {
         lock (_gate)
@@ -33,8 +42,6 @@ internal sealed class DuelReceiver : IDuelHubReceiver
             Replica.ApplyMatchStart(info);
         }
 
-        AnsiConsole.MarkupLineInterpolated(
-            $"[green]Match starting:[/] {info.Players[0].DisplayName} vs {info.Players[1].DisplayName}");
         _starting.TrySetResult(info);
     }
 
@@ -42,15 +49,7 @@ internal sealed class DuelReceiver : IDuelHubReceiver
     {
         lock (_gate)
         {
-            if (!Replica.ApplyTickDelta(delta))
-            {
-                return;
-            }
-        }
-
-        foreach (var duelEvent in delta.Events)
-        {
-            Report(duelEvent);
+            Replica.ApplyTickDelta(delta);
         }
     }
 
@@ -62,22 +61,5 @@ internal sealed class DuelReceiver : IDuelHubReceiver
         }
 
         _finished.TrySetResult(result);
-    }
-
-    private static void Report(DuelEvent duelEvent)
-    {
-        switch (duelEvent.Kind)
-        {
-            case TickEventKind.LinesCleared:
-                AnsiConsole.MarkupLineInterpolated(
-                    $"[grey]P{duelEvent.PlayerIndex} cleared {duelEvent.Value} line(s), combo {duelEvent.Extra}[/]");
-                break;
-            case TickEventKind.GarbageSent:
-                AnsiConsole.MarkupLineInterpolated($"[yellow]P{duelEvent.PlayerIndex} sent {duelEvent.Value} garbage row(s)[/]");
-                break;
-            case TickEventKind.GarbageApplied:
-                AnsiConsole.MarkupLineInterpolated($"[red]P{duelEvent.PlayerIndex} took {duelEvent.Value} garbage row(s)[/]");
-                break;
-        }
     }
 }

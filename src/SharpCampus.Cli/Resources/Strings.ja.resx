@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="BoardHeaderRival" xml:space="preserve">
+    <value>相手</value>
+  </data>
+  <data name="BoardHeaderYou" xml:space="preserve">
+    <value>自分</value>
+  </data>
+  <data name="HudCombo" xml:space="preserve">
+    <value>コンボ</value>
+  </data>
+  <data name="HudGarbage" xml:space="preserve">
+    <value>おじゃま</value>
+  </data>
+  <data name="HudHold" xml:space="preserve">
+    <value>ホールド</value>
+  </data>
+  <data name="HudLevel" xml:space="preserve">
+    <value>レベル</value>
+  </data>
+  <data name="HudNext" xml:space="preserve">
+    <value>ネクスト</value>
+  </data>
+  <data name="KeyMap" xml:space="preserve">
+    <value>移動 ←/→  ソフトドロップ ↓  回転 Z/X  ハードドロップ Space  ホールド C  降参 Q</value>
+  </data>
+  <data name="LoggedIn" xml:space="preserve">
+    <value>{0} でログインしました。</value>
+  </data>
+  <data name="LoggedOut" xml:space="preserve">
+    <value>ログアウトしました。</value>
+  </data>
+  <data name="LoginFailed" xml:space="preserve">
+    <value>ログインに失敗しました: {0}</value>
+  </data>
+  <data name="Matched" xml:space="preserve">
+    <value>{1} のルーム {0} にマッチしました。</value>
+  </data>
+  <data name="NicknameRejected" xml:space="preserve">
+    <value>サーバーが {0} を拒否しました。</value>
+  </data>
+  <data name="NicknameRule" xml:space="preserve">
+    <value>ニックネームは半角英数字とアンダースコアで {0}〜{1} 文字です。</value>
+  </data>
+  <data name="NicknameTaken" xml:space="preserve">
+    <value>{0} はすでに使われています。</value>
+  </data>
+  <data name="NicknameUpdated" xml:space="preserve">
+    <value>ニックネームを {0} に変更しました。</value>
+  </data>
+  <data name="NotLoggedIn" xml:space="preserve">
+    <value>ログインしていません。login &lt;メールアドレス&gt; &lt;パスワード&gt; を実行してください。</value>
+  </data>
+  <data name="NotLoggedInShort" xml:space="preserve">
+    <value>ログインしていません。</value>
+  </data>
+  <data name="OpponentNeverArrived" xml:space="preserve">
+    <value>対戦相手が来ませんでした。</value>
+  </data>
+  <data name="ProfileSummary" xml:space="preserve">
+    <value>コイン {0}、レーティング {1}</value>
+  </data>
+  <data name="Queued" xml:space="preserve">
+    <value>マッチング待機列に登録しました。対戦相手を待っています...</value>
+  </data>
+  <data name="QueueLeft" xml:space="preserve">
+    <value>待機列から抜けました。</value>
+  </data>
+  <data name="QueueReleased" xml:space="preserve">
+    <value>マッチせずに待機列から外れました。もう一度お試しください。</value>
+  </data>
+  <data name="ReasonAborted" xml:space="preserve">
+    <value>中断</value>
+  </data>
+  <data name="ReasonDisconnect" xml:space="preserve">
+    <value>接続切断</value>
+  </data>
+  <data name="ReasonForfeit" xml:space="preserve">
+    <value>降参</value>
+  </data>
+  <data name="ReasonTopOut" xml:space="preserve">
+    <value>トップアウト</value>
+  </data>
+  <data name="ReplBanner" xml:space="preserve">
+    <value>SharpCampus クライアント。終了するには exit と入力します。</value>
+  </data>
+  <data name="ReplicaStats" xml:space="preserve">
+    <value>レプリカ tick {0}、tick 欠落: {1}</value>
+  </data>
+  <data name="ResultAbandoned" xml:space="preserve">
+    <value>マッチ中断</value>
+  </data>
+  <data name="ResultDraw" xml:space="preserve">
+    <value>引き分け</value>
+  </data>
+  <data name="ResultLose" xml:space="preserve">
+    <value>負け</value>
+  </data>
+  <data name="ResultWin" xml:space="preserve">
+    <value>勝ち</value>
+  </data>
+  <data name="Seated" xml:space="preserve">
+    <value>座席 {0} に着きました。</value>
+  </data>
+  <data name="SeatRejected" xml:space="preserve">
+    <value>ルーム {0} が入室を拒否しました。</value>
+  </data>
+  <data name="ServerUnreachable" xml:space="preserve">
+    <value>{0}: {1} に接続できません</value>
+  </data>
+  <data name="ServerUnreachableDetail" xml:space="preserve">
+    <value>サーバーに接続できません: {0}</value>
+  </data>
+  <data name="ServerVersionLine" xml:space="preserve">
+    <value>{0} (UTC {1:O})</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>セッションの有効期限が切れているか無効です。login &lt;メールアドレス&gt; &lt;パスワード&gt; を実行してください。</value>
+  </data>
+  <data name="SignedUp" xml:space="preserve">
+    <value>{0} で登録しました。</value>
+  </data>
+  <data name="SignUpFailed" xml:space="preserve">
+    <value>登録に失敗しました: {0}</value>
+  </data>
+  <data name="StateFinished" xml:space="preserve">
+    <value>マッチ終了</value>
+  </data>
+  <data name="StateGetReady" xml:space="preserve">
+    <value>準備...</value>
+  </data>
+  <data name="WaitingForOpponent" xml:space="preserve">
+    <value>対戦相手を待っています...</value>
+  </data>
+  <data name="WindowTooSmall" xml:space="preserve">
+    <value>コンソールウィンドウが {0}x{1} より小さいため、表示が折り返される場合があります。</value>
+  </data>
+</root>

@@ -13,6 +13,7 @@
     <PackageReference Include="MagicOnion.Client" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="ZString" />
   </ItemGroup>
 
   <ItemGroup>

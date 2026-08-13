@@ -2,6 +2,7 @@ using ConsoleAppFramework;
 using Grpc.Core;
 using Grpc.Net.Client;
 using MagicOnion.Client;
+using SharpCampus.Cli.Resources;
 using SharpCampus.Shared.Services;
 using Spectre.Console;
 
@@ -31,11 +32,11 @@ internal sealed class StatusCommand
 
                 // Interpolated markup escapes the server-supplied values, which carry markup-significant characters.
                 AnsiConsole.MarkupLineInterpolated(
-                    $"[green]{label}[/]: {status.ServerName} [grey]{status.Version} (UTC {status.TimestampUtc:O})[/]");
+                    $"[green]{label}[/]: {status.ServerName} [grey]{Localization.Format(Strings.ServerVersionLine, status.Version, status.TimestampUtc)}[/]");
             }
             catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
             {
-                AnsiConsole.MarkupLineInterpolated($"[red]{label}: unreachable at {address}[/]");
+                AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, label, address)}[/]");
             }
         }
     }

@@ -1,11 +1,17 @@
 using System.CommandLine.Parsing;
 using ConsoleAppFramework;
 using MagicOnion.Serialization;
+using SharpCampus.Cli;
+using SharpCampus.Cli.Resources;
 using SharpCampus.Shared.Serialization;
 using Spectre.Console;
 
 // Every client and hub this process creates has to read the same MessagePack shapes the servers write.
 MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// The culture has to be set before any command runs, so the option is consumed here rather than
+// declared on every command.
+args = Localization.Apply(args);
 
 // Command classes register themselves through [RegisterCommands]; nothing is added by hand here.
 var app = ConsoleApp.Create();
@@ -16,7 +22,7 @@ if (args.Length > 0)
     return;
 }
 
-AnsiConsole.MarkupLine("[grey]SharpCampus client. Type 'exit' to quit.[/]");
+AnsiConsole.MarkupLineInterpolated($"[grey]{Strings.ReplBanner}[/]");
 
 while (true)
 {

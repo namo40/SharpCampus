@@ -2,7 +2,8 @@ using ConsoleAppFramework;
 using Grpc.Core;
 using Grpc.Net.Client;
 using MagicOnion.Client;
-using SharpCampus.GameCore;
+using SharpCampus.Cli.Duel;
+using SharpCampus.Cli.Resources;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Services;
@@ -10,31 +11,22 @@ using Spectre.Console;
 
 namespace SharpCampus.Cli.Commands;
 
-// Temporary: proves matchmaking, the room, the hub contract and the replica end to end while there is
-// no playable client. Real play, rendering and the match flow replace this.
 [RegisterCommands]
 internal sealed class DuelCommand
 {
     private const string ApiServerAddress = "http://localhost:5001";
     private static readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan _startTimeout = TimeSpan.FromSeconds(60);
 
-    private static readonly GameInput[] _moves =
-    [
-        GameInput.MoveLeft,
-        GameInput.MoveRight,
-        GameInput.RotateCw,
-        GameInput.RotateCcw,
-        GameInput.Hold,
-    ];
-
-    /// <summary>Queues for a duel and plays the match out with random inputs.</summary>
+    /// <summary>Queues for a duel and plays the match out.</summary>
+    /// <param name="auto">Plays the match with random inputs instead of the keyboard.</param>
     /// <param name="cancellationToken">Cancellation of the queue wait or the running match.</param>
     [Command("duel")]
-    public async Task ExecuteAsync(CancellationToken cancellationToken = default)
+    public async Task ExecuteAsync(bool auto = false, CancellationToken cancellationToken = default)
     {
         if (ClientSession.Load() is not { } session)
         {
-            AnsiConsole.MarkupLine("[yellow]Not logged in. Run: login <email> <password>[/]");
+            AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.NotLoggedIn}[/]");
             return;
         }
 
@@ -47,16 +39,16 @@ internal sealed class DuelCommand
         {
             if (await WaitForTicketAsync(matchmaking, cancellationToken) is { } ticket)
             {
-                await PlayAsync(ticket, authorization, cancellationToken);
+                await PlayAsync(ticket, authorization, auto, cancellationToken);
             }
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unauthenticated)
         {
-            AnsiConsole.MarkupLine("[red]Session expired or invalid. Run: login <email> <password>[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Strings.SessionExpired}[/]");
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]Server unreachable: {e.Status.Detail}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachableDetail, e.Status.Detail)}[/]");
         }
     }
 
@@ -65,7 +57,7 @@ internal sealed class DuelCommand
         CancellationToken cancellationToken)
     {
         var status = await matchmaking.EnqueueAsync();
-        AnsiConsole.MarkupLine("[green]Queued. Waiting for an opponent...[/]");
+        AnsiConsole.MarkupLineInterpolated($"[green]{Strings.Queued}[/]");
 
         // Production note: a live service pushes the match to the client. Polling keeps the contract to
         // three plain Unary calls and needs nothing from the identity provider.
@@ -78,7 +70,7 @@ internal sealed class DuelCommand
             catch (OperationCanceledException)
             {
                 await matchmaking.CancelAsync();
-                AnsiConsole.MarkupLine("[yellow]Left the queue.[/]");
+                AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.QueueLeft}[/]");
                 return null;
             }
 
@@ -87,16 +79,20 @@ internal sealed class DuelCommand
 
         if (status.State == MatchQueueState.None)
         {
-            AnsiConsole.MarkupLine("[yellow]The queue let you go without a match. Try again.[/]");
+            AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.QueueReleased}[/]");
             return null;
         }
 
         return status.Ticket;
     }
 
-    private static async Task PlayAsync(MatchTicket ticket, Metadata authorization, CancellationToken cancellationToken)
+    private static async Task PlayAsync(
+        MatchTicket ticket,
+        Metadata authorization,
+        bool auto,
+        CancellationToken cancellationToken)
     {
-        AnsiConsole.MarkupLineInterpolated($"[green]Matched into {ticket.RoomId} on {ticket.Endpoint}.[/]");
+        AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.Matched, ticket.RoomId, ticket.Endpoint)}[/]");
 
         using var roomChannel = GrpcChannel.ForAddress(ticket.Endpoint);
         var receiver = new DuelReceiver();
@@ -109,7 +105,7 @@ internal sealed class DuelCommand
 
         try
         {
-            await PlayAsync(hub, receiver, ticket, cancellationToken);
+            await PlayAsync(hub, receiver, ticket, auto, cancellationToken);
         }
         finally
         {
@@ -121,17 +117,21 @@ internal sealed class DuelCommand
         IDuelHub hub,
         DuelReceiver receiver,
         MatchTicket ticket,
+        bool auto,
         CancellationToken cancellationToken)
     {
         var join = await hub.JoinAsync(new JoinRoomRequest(ticket.RoomId, ticket.EntryToken));
         if (join is not { Accepted: true, PlayerIndex: { } seat })
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]Room {ticket.RoomId} would not seat you.[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.SeatRejected, ticket.RoomId)}[/]");
             return;
         }
 
-        AnsiConsole.MarkupLineInterpolated(
-            $"[green]Seated as player {seat}.[/] {(join.WaitingForOpponent ? "Waiting for the opponent..." : string.Empty)}");
+        AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.Seated, seat.AsPrimitive())}[/]");
+        if (join.WaitingForOpponent)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[grey]{Strings.WaitingForOpponent}[/]");
+        }
 
         // The room gives up on a missing opponent by itself, so this wait can end with a start or
         // with the aborted match's result.
@@ -139,11 +139,11 @@ internal sealed class DuelCommand
         try
         {
             outcome = await Task.WhenAny(receiver.Starting, receiver.Finished)
-                .WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+                .WaitAsync(_startTimeout, cancellationToken);
         }
         catch (TimeoutException)
         {
-            AnsiConsole.MarkupLine("[yellow]The opponent never arrived.[/]");
+            AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.OpponentNeverArrived}[/]");
             return;
         }
 
@@ -151,44 +151,47 @@ internal sealed class DuelCommand
         {
             receiver.ApplySnapshot(await hub.RequestSnapshotAsync());
 
-            while (!receiver.Finished.IsCompleted && !cancellationToken.IsCancellationRequested)
-            {
-                await hub.SendInputsAsync(NextInputs());
-                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
-            }
+            var renderer = new DuelRenderer(seat.AsPrimitive(), DisplayNames(await receiver.Starting));
+            await new DuelSession(hub, receiver, renderer, auto).RunAsync(cancellationToken);
         }
 
-        var result = await receiver.Finished.WaitAsync(cancellationToken);
+        Report(await receiver.Finished.WaitAsync(cancellationToken), receiver, seat);
+    }
+
+    private static void Report(MatchResult result, DuelReceiver receiver, Shared.Values.PlayerIndex seat)
+    {
         var verdict = result.Reason switch
         {
-            MatchEndReason.Aborted => "Match abandoned",
+            MatchEndReason.Aborted => Strings.ResultAbandoned,
             _ => result.WinnerPlayerIndex switch
             {
-                null => "Draw",
-                { } winner when winner == seat => "You win",
-                _ => "You lose",
+                null => Strings.ResultDraw,
+                { } winner when winner == seat => Strings.ResultWin,
+                _ => Strings.ResultLose,
             },
         };
 
-        AnsiConsole.MarkupLineInterpolated($"[green]{verdict}[/] [grey]({result.Outcome} by {result.Reason})[/]");
+        var reason = result.Reason switch
+        {
+            MatchEndReason.TopOut => Strings.ReasonTopOut,
+            MatchEndReason.Forfeit => Strings.ReasonForfeit,
+            MatchEndReason.Disconnect => Strings.ReasonDisconnect,
+            _ => Strings.ReasonAborted,
+        };
+
+        AnsiConsole.MarkupLineInterpolated($"[green]{verdict}[/] [grey]({reason})[/]");
         AnsiConsole.MarkupLineInterpolated(
-            $"[grey]Replica tick {receiver.Replica.Tick.AsPrimitive()}, missed ticks: {receiver.Replica.HasMissedTicks}[/]");
+            $"[grey]{Localization.Format(Strings.ReplicaStats, receiver.Replica.Tick.AsPrimitive(), receiver.Replica.HasMissedTicks)}[/]");
     }
 
-    private static GameInput[] NextInputs()
+    private static string[] DisplayNames(MatchStartInfo start)
     {
-        var inputs = new GameInput[Random.Shared.Next(1, 4)];
-        for (var i = 0; i < inputs.Length; i++)
+        var names = new string[2];
+        foreach (var player in start.Players)
         {
-            inputs[i] = _moves[Random.Shared.Next(_moves.Length)];
+            names[player.PlayerIndex.AsPrimitive()] = player.DisplayName;
         }
 
-        // Without the occasional drop the pieces only ever land on gravity, and a match takes minutes.
-        if (Random.Shared.Next(4) == 0)
-        {
-            inputs[^1] = GameInput.HardDrop;
-        }
-
-        return inputs;
+        return names;
     }
 }

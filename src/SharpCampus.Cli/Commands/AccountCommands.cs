@@ -2,6 +2,7 @@ using ConsoleAppFramework;
 using Grpc.Core;
 using Grpc.Net.Client;
 using MagicOnion.Client;
+using SharpCampus.Cli.Resources;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Services;
@@ -13,6 +14,7 @@ namespace SharpCampus.Cli.Commands;
 internal sealed class AccountCommands
 {
     private const string ApiServerAddress = "http://localhost:5001";
+    private const string ApiServerLabel = "ApiServer";
 
     /// <summary>Creates a Supabase account and signs in with it.</summary>
     /// <param name="email">Email address to register.</param>
@@ -23,12 +25,12 @@ internal sealed class AccountCommands
         var result = await SupabaseAuthClient.SignUpAsync(email, password);
         if (result.AccessToken is null)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]Sign-up failed: {result.ErrorMessage}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.SignUpFailed, result.ErrorMessage)}[/]");
             return;
         }
 
         new ClientSession(result.AccessToken, email).Save();
-        AnsiConsole.MarkupLineInterpolated($"[green]Signed up as {email}.[/]");
+        AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.SignedUp, email)}[/]");
     }
 
     /// <summary>Signs in to Supabase and stores the session for later commands.</summary>
@@ -40,18 +42,26 @@ internal sealed class AccountCommands
         var result = await SupabaseAuthClient.SignInAsync(email, password);
         if (result.AccessToken is null)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]Login failed: {result.ErrorMessage}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.LoginFailed, result.ErrorMessage)}[/]");
             return;
         }
 
         new ClientSession(result.AccessToken, email).Save();
-        AnsiConsole.MarkupLineInterpolated($"[green]Logged in as {email}.[/]");
+        AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.LoggedIn, email)}[/]");
     }
 
     /// <summary>Discards the stored session.</summary>
     [Command("logout")]
-    public void LogOut() =>
-        AnsiConsole.MarkupLine(ClientSession.Delete() ? "[green]Logged out.[/]" : "[yellow]Not logged in.[/]");
+    public void LogOut()
+    {
+        if (ClientSession.Delete())
+        {
+            AnsiConsole.MarkupLineInterpolated($"[green]{Strings.LoggedOut}[/]");
+            return;
+        }
+
+        AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.NotLoggedInShort}[/]");
+    }
 
     /// <summary>Asks the ApiServer which account the stored session belongs to.</summary>
     [Command("whoami")]
@@ -59,7 +69,7 @@ internal sealed class AccountCommands
     {
         if (ClientSession.Load() is not { } session)
         {
-            AnsiConsole.MarkupLine("[yellow]Not logged in. Run: login <email> <password>[/]");
+            AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.NotLoggedIn}[/]");
             return;
         }
 
@@ -74,15 +84,15 @@ internal sealed class AccountCommands
 
             AnsiConsole.MarkupLineInterpolated($"[green]{identity.Email}[/] [grey]{identity.UserId}[/]");
             AnsiConsole.MarkupLineInterpolated(
-                $"[green]{profile.Nickname}[/] [grey]{profile.Coins.AsPrimitive()} coins, rating {profile.Rating.AsPrimitive()}[/]");
+                $"[green]{profile.Nickname}[/] [grey]{Localization.Format(Strings.ProfileSummary, profile.Coins.AsPrimitive(), profile.Rating.AsPrimitive())}[/]");
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unauthenticated)
         {
-            AnsiConsole.MarkupLine("[red]Session expired or invalid. Run: login <email> <password>[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Strings.SessionExpired}[/]");
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]ApiServer: unreachable at {ApiServerAddress}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
         }
     }
 
@@ -93,14 +103,15 @@ internal sealed class AccountCommands
     {
         if (ClientSession.Load() is not { } session)
         {
-            AnsiConsole.MarkupLine("[yellow]Not logged in. Run: login <email> <password>[/]");
+            AnsiConsole.MarkupLineInterpolated($"[yellow]{Strings.NotLoggedIn}[/]");
             return;
         }
 
         // The server validates as well; checking here saves a round trip on an obvious typo.
         if (!NicknameRules.IsValid(nickname))
         {
-            AnsiConsole.MarkupLine($"[red]Nicknames are {NicknameRules.MinLength} to {NicknameRules.MaxLength} letters, digits or underscores.[/]");
+            AnsiConsole.MarkupLineInterpolated(
+                $"[red]{Localization.Format(Strings.NicknameRule, NicknameRules.MinLength, NicknameRules.MaxLength)}[/]");
             return;
         }
 
@@ -113,23 +124,23 @@ internal sealed class AccountCommands
             switch (await client.UpdateNicknameAsync(nickname))
             {
                 case NicknameUpdateResult.Updated:
-                    AnsiConsole.MarkupLineInterpolated($"[green]Nickname is now {nickname}.[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.NicknameUpdated, nickname)}[/]");
                     break;
                 case NicknameUpdateResult.Duplicate:
-                    AnsiConsole.MarkupLineInterpolated($"[yellow]{nickname} is already taken.[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[yellow]{Localization.Format(Strings.NicknameTaken, nickname)}[/]");
                     break;
                 case NicknameUpdateResult.Invalid:
-                    AnsiConsole.MarkupLineInterpolated($"[red]The server rejected {nickname}.[/]");
+                    AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.NicknameRejected, nickname)}[/]");
                     break;
             }
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unauthenticated)
         {
-            AnsiConsole.MarkupLine("[red]Session expired or invalid. Run: login <email> <password>[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Strings.SessionExpired}[/]");
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]ApiServer: unreachable at {ApiServerAddress}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
         }
     }
 }
