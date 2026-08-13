@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Values;
@@ -14,7 +15,7 @@ public sealed class RedisTicketStore(IConnectionMultiplexer redis) : ITicketStor
 
     public async Task<MatchTicket?> GetAsync(UserId userId)
     {
-        var value = await redis.GetDatabase().StringGetAsync(TicketKey(userId));
+        var value = await redis.GetDatabase().StringGetAsync(MatchmakingKeys.Ticket(userId));
         if (value.IsNull)
         {
             return null;
@@ -29,12 +30,10 @@ public sealed class RedisTicketStore(IConnectionMultiplexer redis) : ITicketStor
         var stored = new StoredTicket(ticket.RoomId.ToString(), ticket.Endpoint, ticket.EntryToken);
 
         return redis.GetDatabase().StringSetAsync(
-            TicketKey(userId),
+            MatchmakingKeys.Ticket(userId),
             JsonSerializer.Serialize(stored, JsonSerializerOptions.Web),
             _lifetime);
     }
-
-    private static string TicketKey(UserId userId) => $"mm:ticket:{userId}";
 
     // The wire contract travels as MessagePack; what sits in Redis is plain JSON, so it stays readable
     // from redis-cli while a match is being set up.

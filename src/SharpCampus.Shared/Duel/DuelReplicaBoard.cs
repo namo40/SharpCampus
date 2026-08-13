@@ -65,6 +65,23 @@ public sealed class DuelReplicaBoard
     /// <returns>What occupies the cell.</returns>
     public CellKind GetCell(int x, int y) => _cells[(y * Width) + x];
 
+    internal void Clear()
+    {
+        Array.Clear(_cells, 0, _cells.Length);
+        _next.Clear();
+        _holdSpendPending = false;
+
+        Hold = null;
+        HoldAvailable = false;
+        ActivePiece = null;
+        SoftDropActive = false;
+        PendingGarbage = 0;
+        Combo = 0;
+        Level = 0;
+        ElapsedTicks = 0;
+        ToppedOut = false;
+    }
+
     internal void Load(PlayerSnapshot snapshot)
     {
         for (var i = 0; i < _cells.Length; i++)

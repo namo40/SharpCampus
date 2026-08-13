@@ -79,6 +79,9 @@
   <data name="HudNext" xml:space="preserve">
     <value>NEXT</value>
   </data>
+  <data name="HudPing" xml:space="preserve">
+    <value>PING</value>
+  </data>
   <data name="KeyMap" xml:space="preserve">
     <value>Move ←/→   Soft drop ↓   Rotate Z/X   Hard drop Space   Hold C   Forfeit Q</value>
   </data>
@@ -90,6 +93,9 @@
   </data>
   <data name="LoginFailed" xml:space="preserve">
     <value>Login failed: {0}</value>
+  </data>
+  <data name="MatchResumed" xml:space="preserve">
+    <value>Rejoined the match already in progress.</value>
   </data>
   <data name="Matched" xml:space="preserve">
     <value>Matched into {0} on {1}.</value>
@@ -111,6 +117,9 @@
   </data>
   <data name="NotLoggedInShort" xml:space="preserve">
     <value>Not logged in.</value>
+  </data>
+  <data name="OpponentDisconnected" xml:space="preserve">
+    <value>Opponent disconnected</value>
   </data>
   <data name="OpponentNeverArrived" xml:space="preserve">
     <value>The opponent never arrived.</value>
@@ -138,6 +147,18 @@
   </data>
   <data name="ReasonTopOut" xml:space="preserve">
     <value>top out</value>
+  </data>
+  <data name="RematchDeclined" xml:space="preserve">
+    <value>No rematch. Leaving the room.</value>
+  </data>
+  <data name="RematchNoAnswer" xml:space="preserve">
+    <value>No answer given. Waiting for the room to close the offer...</value>
+  </data>
+  <data name="RematchPrompt" xml:space="preserve">
+    <value>Rematch? [Y/N] {0}s</value>
+  </data>
+  <data name="RematchWaiting" xml:space="preserve">
+    <value>Waiting for the opponent's answer...</value>
   </data>
   <data name="ReplBanner" xml:space="preserve">
     <value>SharpCampus client. Type 'exit' to quit.</value>

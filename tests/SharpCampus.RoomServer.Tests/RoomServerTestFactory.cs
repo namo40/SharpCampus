@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using SharpCampus.RoomServer.Rooms;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Security;
 using StackExchange.Redis;
 
@@ -67,6 +68,7 @@ public sealed class RoomServerTestFactory : WebApplicationFactory<Program>
             // through the control service rather than by being discovered.
             services.RemoveAll<IHostedService>();
             services.AddSingleton(Substitute.For<IConnectionMultiplexer>());
+            services.AddSingleton(Substitute.For<IActiveRoomStore>());
         });
 
     protected override void Dispose(bool disposing)

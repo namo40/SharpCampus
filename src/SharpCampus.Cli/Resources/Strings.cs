@@ -16,10 +16,12 @@ internal static class Strings
     public static string HudHold => Get(nameof(HudHold));
     public static string HudLevel => Get(nameof(HudLevel));
     public static string HudNext => Get(nameof(HudNext));
+    public static string HudPing => Get(nameof(HudPing));
     public static string KeyMap => Get(nameof(KeyMap));
     public static string LoggedIn => Get(nameof(LoggedIn));
     public static string LoggedOut => Get(nameof(LoggedOut));
     public static string LoginFailed => Get(nameof(LoginFailed));
+    public static string MatchResumed => Get(nameof(MatchResumed));
     public static string Matched => Get(nameof(Matched));
     public static string NicknameRejected => Get(nameof(NicknameRejected));
     public static string NicknameRule => Get(nameof(NicknameRule));
@@ -27,6 +29,7 @@ internal static class Strings
     public static string NicknameUpdated => Get(nameof(NicknameUpdated));
     public static string NotLoggedIn => Get(nameof(NotLoggedIn));
     public static string NotLoggedInShort => Get(nameof(NotLoggedInShort));
+    public static string OpponentDisconnected => Get(nameof(OpponentDisconnected));
     public static string OpponentNeverArrived => Get(nameof(OpponentNeverArrived));
     public static string ProfileSummary => Get(nameof(ProfileSummary));
     public static string QueueLeft => Get(nameof(QueueLeft));
@@ -36,6 +39,10 @@ internal static class Strings
     public static string ReasonDisconnect => Get(nameof(ReasonDisconnect));
     public static string ReasonForfeit => Get(nameof(ReasonForfeit));
     public static string ReasonTopOut => Get(nameof(ReasonTopOut));
+    public static string RematchDeclined => Get(nameof(RematchDeclined));
+    public static string RematchNoAnswer => Get(nameof(RematchNoAnswer));
+    public static string RematchPrompt => Get(nameof(RematchPrompt));
+    public static string RematchWaiting => Get(nameof(RematchWaiting));
     public static string ReplBanner => Get(nameof(ReplBanner));
     public static string ReplicaStats => Get(nameof(ReplicaStats));
     public static string ResultAbandoned => Get(nameof(ResultAbandoned));

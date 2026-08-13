@@ -79,6 +79,9 @@
   <data name="HudNext" xml:space="preserve">
     <value>ネクスト</value>
   </data>
+  <data name="HudPing" xml:space="preserve">
+    <value>遅延</value>
+  </data>
   <data name="KeyMap" xml:space="preserve">
     <value>移動 ←/→  ソフトドロップ ↓  回転 Z/X  ハードドロップ Space  ホールド C  降参 Q</value>
   </data>
@@ -90,6 +93,9 @@
   </data>
   <data name="LoginFailed" xml:space="preserve">
     <value>ログインに失敗しました: {0}</value>
+  </data>
+  <data name="MatchResumed" xml:space="preserve">
+    <value>進行中のマッチに復帰しました。</value>
   </data>
   <data name="Matched" xml:space="preserve">
     <value>{1} のルーム {0} にマッチしました。</value>
@@ -111,6 +117,9 @@
   </data>
   <data name="NotLoggedInShort" xml:space="preserve">
     <value>ログインしていません。</value>
+  </data>
+  <data name="OpponentDisconnected" xml:space="preserve">
+    <value>対戦相手が切断中</value>
   </data>
   <data name="OpponentNeverArrived" xml:space="preserve">
     <value>対戦相手が来ませんでした。</value>
@@ -138,6 +147,18 @@
   </data>
   <data name="ReasonTopOut" xml:space="preserve">
     <value>トップアウト</value>
+  </data>
+  <data name="RematchDeclined" xml:space="preserve">
+    <value>再戦はありません。ルームから退出します。</value>
+  </data>
+  <data name="RematchNoAnswer" xml:space="preserve">
+    <value>返答しませんでした。ルームが提案を閉じるまで待っています...</value>
+  </data>
+  <data name="RematchPrompt" xml:space="preserve">
+    <value>再戦しますか? [Y/N] {0}秒</value>
+  </data>
+  <data name="RematchWaiting" xml:space="preserve">
+    <value>対戦相手の返答を待っています...</value>
   </data>
   <data name="ReplBanner" xml:space="preserve">
     <value>SharpCampus クライアント。終了するには exit と入力します。</value>

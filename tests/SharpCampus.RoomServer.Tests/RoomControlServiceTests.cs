@@ -39,5 +39,10 @@ public class RoomControlServiceTests
     }
 
     private static RoomManager CreateManager(ILogicLooperPool pool, int capacity = 100)
-        => new(pool, RoomFixture.Rules(), RoomFixture.Options(capacity), NullLogger<RoomManager>.Instance);
+        => new(
+            pool,
+            RoomFixture.Rules(),
+            RoomFixture.ActiveRooms(),
+            RoomFixture.Options(capacity),
+            NullLogger<RoomManager>.Instance);
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using SharpCampus.Server.Common.Authentication;
 using SharpCampus.Server.Common.Data;
 using SharpCampus.Server.Common.MasterData;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using StackExchange.Redis;
@@ -76,6 +77,7 @@ public static class ServiceCollectionExtensions
         // publish the registry take this on construction, so an unreachable Redis stops startup.
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
         services.AddSingleton<IRoomRegistry, RedisRoomRegistry>();
+        services.AddSingleton<IActiveRoomStore, RedisActiveRoomStore>();
         return services;
     }
 

@@ -25,7 +25,7 @@ public class RoomRegistryHeartbeatTests
 
         using var pool = new ManualLogicLooperPool(20);
         var options = RoomFixture.Options(capacity: 42);
-        var rooms = new RoomManager(pool, RoomFixture.Rules(), options, NullLogger<RoomManager>.Instance);
+        var rooms = CreateRooms(pool, options);
         rooms.Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
 
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -54,7 +54,7 @@ public class RoomRegistryHeartbeatTests
     {
         using var pool = new ManualLogicLooperPool(20);
         var options = RoomFixture.Options();
-        var rooms = new RoomManager(pool, RoomFixture.Rules(), options, NullLogger<RoomManager>.Instance);
+        var rooms = CreateRooms(pool, options);
 
         var cancellationToken = TestContext.Current.CancellationToken;
         var heartbeat = CreateHeartbeat(rooms, options);
@@ -64,6 +64,9 @@ public class RoomRegistryHeartbeatTests
 
         await _registry.Received(1).RemoveAsync("test");
     }
+
+    private static RoomManager CreateRooms(ILogicLooperPool pool, IOptions<RoomServerOptions> options)
+        => new(pool, RoomFixture.Rules(), RoomFixture.ActiveRooms(), options, NullLogger<RoomManager>.Instance);
 
     private RoomRegistryHeartbeat CreateHeartbeat(RoomManager rooms, IOptions<RoomServerOptions> options)
         => new(_registry, rooms, options, NullLogger<RoomRegistryHeartbeat>.Instance);

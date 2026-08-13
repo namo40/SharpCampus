@@ -1,6 +1,10 @@
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using SharpCampus.ApiServer.Matchmaking;
 using SharpCampus.Server.Common.Authentication;
+using SharpCampus.Server.Common.Configuration;
+using SharpCampus.Server.Common.Matchmaking;
+using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Values;
@@ -14,6 +18,9 @@ public class MatchmakingServiceTests
 
     private readonly IMatchQueue _queue = Substitute.For<IMatchQueue>();
     private readonly ITicketStore _tickets = Substitute.For<ITicketStore>();
+    private readonly IActiveRoomStore _activeRooms = Substitute.For<IActiveRoomStore>();
+    private readonly EntryTokenService _entryTokens =
+        new(Options.Create(new EntryTokenOptions { Secret = "test-secret" }), TimeProvider.System);
 
     [Fact]
     public async Task Status_IsNoneBeforeAnythingHappens()
@@ -79,6 +86,35 @@ public class MatchmakingServiceTests
     }
 
     [Fact]
+    public async Task Enqueue_SendsAPlayerTheServerStillHasInARoomStraightBackToIt()
+    {
+        var roomId = new RoomId(Ulid.NewUlid());
+        _activeRooms.GetAsync(_user).Returns(new ActiveRoom(roomId, "http://localhost:5002"));
+
+        var status = await CreateService().EnqueueAsync();
+
+        Assert.Equal(MatchQueueState.Matched, status.State);
+        Assert.Equal(roomId, status.Ticket!.RoomId);
+        Assert.Equal("http://localhost:5002", status.Ticket.Endpoint);
+
+        // The token issued at pairing expired long ago, so returning has to carry a freshly signed one.
+        Assert.True(_entryTokens.TryValidate(status.Ticket.EntryToken, out var signedUser, out var signedRoom));
+        Assert.Equal(_user, signedUser);
+        Assert.Equal(roomId, signedRoom);
+
+        await _queue.DidNotReceive().EnqueueAsync(Arg.Any<UserId>());
+    }
+
+    [Fact]
+    public async Task Enqueue_WithoutAnActiveRoomQueuesAsUsual()
+    {
+        _activeRooms.GetAsync(_user).Returns((ActiveRoom?)null);
+
+        Assert.Equal(MatchQueueState.Queued, (await CreateService().EnqueueAsync()).State);
+        await _queue.Received(1).EnqueueAsync(_user);
+    }
+
+    [Fact]
     public async Task Cancel_TakesTheCallerOutOfTheQueue()
     {
         await CreateService().CancelAsync();
@@ -91,6 +127,6 @@ public class MatchmakingServiceTests
         var userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(_user);
 
-        return new MatchmakingService(userContext, _queue, _tickets);
+        return new MatchmakingService(userContext, _queue, _tickets, _activeRooms, _entryTokens);
     }
 }

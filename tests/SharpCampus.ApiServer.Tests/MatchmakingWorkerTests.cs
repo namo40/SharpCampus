@@ -5,6 +5,7 @@ using NSubstitute;
 using SharpCampus.ApiServer.Matchmaking;
 using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
@@ -27,6 +28,7 @@ public class MatchmakingWorkerTests
     private readonly IPairingLock _pairingLock = Substitute.For<IPairingLock>();
     private readonly IMatchQueue _queue = Substitute.For<IMatchQueue>();
     private readonly ITicketStore _tickets = Substitute.For<ITicketStore>();
+    private readonly IActiveRoomStore _activeRooms = Substitute.For<IActiveRoomStore>();
     private readonly IRoomRegistry _registry = Substitute.For<IRoomRegistry>();
     private readonly IRoomControlClient _roomControl = Substitute.For<IRoomControlClient>();
     private readonly IProfileRepository _profiles = Substitute.For<IProfileRepository>();
@@ -98,6 +100,21 @@ public class MatchmakingWorkerTests
             Assert.Equal(userId, signedUser);
             Assert.Equal(ticket.RoomId, signedRoom);
         }
+    }
+
+    [Fact]
+    public async Task PairedPlayers_AreRecordedAsBeingInTheRoomTheyWereSentTo()
+    {
+        QueueHolds(_first, _second);
+
+        await CreateWorker().PairAsync();
+
+        var roomId = ((CreateRoomRequest)_roomControl.ReceivedCalls().Single().GetArguments()[1]!).RoomId;
+        var expected = new ActiveRoom(roomId, _server.ClientEndpoint);
+
+        // This is what a client that died mid-match is answered with when it queues again.
+        await _activeRooms.Received(1).StoreAsync(_first, expected);
+        await _activeRooms.Received(1).StoreAsync(_second, expected);
     }
 
     [Fact]
@@ -209,6 +226,7 @@ public class MatchmakingWorkerTests
             _pairingLock,
             _queue,
             _tickets,
+            _activeRooms,
             _registry,
             _roomControl,
             EntryTokens(),

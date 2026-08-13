@@ -37,7 +37,7 @@ public sealed class DuelHub(RoomManager rooms, EntryTokenService entryTokens)
         var group = await Group.AddAsync($"room:{request.RoomId}");
 
         var completion = new TaskCompletionSource<JoinRoomResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var result = room.TryPost(RoomCommand.Join(tokenUserId, group, completion))
+        var result = room.TryPost(RoomCommand.Join(tokenUserId, Context.ContextId, group, completion))
             ? await completion.Task
             : JoinRoomResult.Rejected;
 
@@ -80,13 +80,15 @@ public sealed class DuelHub(RoomManager rooms, EntryTokenService entryTokens)
 
     public Task ForfeitAsync()
     {
-        _room?.TryPost(RoomCommand.Forfeit(_playerIndex));
+        _room?.TryPost(RoomCommand.Forfeit(_playerIndex, Context.ContextId));
         return Task.CompletedTask;
     }
 
+    // The connection id travels with it: a seat that has already been taken back by a newer connection
+    // must not be emptied by the old one finally noticing it is gone.
     protected override ValueTask OnDisconnected()
     {
-        _room?.TryPost(RoomCommand.Disconnect(_playerIndex));
+        _room?.TryPost(RoomCommand.Disconnect(_playerIndex, Context.ContextId));
         return default;
     }
 

@@ -7,7 +7,7 @@ namespace SharpCampus.Cli.Duel;
 
 // One frame is assembled in full and written once over the previous one, so nothing is ever drawn
 // cell by cell and the two boards on screen always belong to the same tick.
-internal sealed class DuelRenderer(int seat, string[] displayNames)
+internal sealed class DuelRenderer(int seat, string[] displayNames, DuelStatus status)
 {
     public const int MinimumWidth = 80;
     public const int MinimumHeight = 26;
@@ -125,7 +125,7 @@ internal sealed class DuelRenderer(int seat, string[] displayNames)
         frame.Append('│');
     }
 
-    private static void AppendHudRow(ref Utf16ValueStringBuilder frame, DuelReplica replica, DuelReplicaBoard board, int row)
+    private void AppendHudRow(ref Utf16ValueStringBuilder frame, DuelReplica replica, DuelReplicaBoard board, int row)
     {
         if (row is not (1 or 2 or 3 or 5 or 6 or 7 or 9 or 10 or 11 or 13))
         {
@@ -180,6 +180,8 @@ internal sealed class DuelRenderer(int seat, string[] displayNames)
                 frame.Append(board.Level);
                 frame.Append("   ");
                 AppendClock(ref frame, board.ElapsedTicks);
+                frame.Append("  ");
+                AppendPing(ref frame);
                 break;
             case 13:
                 frame.Append(StateText(replica));
@@ -214,13 +216,36 @@ internal sealed class DuelRenderer(int seat, string[] displayNames)
         frame.Append(seconds % 60);
     }
 
+    // What the heartbeat measured, which is the connection's own round trip and not the tick stream's.
+    private void AppendPing(ref Utf16ValueStringBuilder frame)
+    {
+        frame.Append(Strings.HudPing);
+        frame.Append(' ');
+
+        var ping = status.PingMilliseconds;
+        if (ping < 0)
+        {
+            frame.Append("--");
+            return;
+        }
+
+        frame.Append(ping);
+        frame.Append("ms");
+    }
+
     // The room announces the match a countdown ahead of the first tick, and the replica sits on tick
-    // zero for that whole stretch.
-    private static string StateText(DuelReplica replica)
+    // zero for that whole stretch. A rival who dropped out keeps their board: the match runs on while
+    // the room holds their seat, so the line says so rather than the board going blank.
+    private string StateText(DuelReplica replica)
     {
         if (replica.Result is not null)
         {
             return Strings.StateFinished;
+        }
+
+        if (!status.IsConnected(seat ^ 1))
+        {
+            return Strings.OpponentDisconnected;
         }
 
         return replica.Tick.AsPrimitive() == 0 ? Strings.StateGetReady : string.Empty;

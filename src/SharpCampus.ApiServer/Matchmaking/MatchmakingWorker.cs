@@ -1,4 +1,5 @@
 using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
@@ -15,6 +16,7 @@ internal sealed class MatchmakingWorker(
     IPairingLock pairingLock,
     IMatchQueue queue,
     ITicketStore tickets,
+    IActiveRoomStore activeRooms,
     IRoomRegistry registry,
     IRoomControlClient roomControl,
     EntryTokenService entryTokens,
@@ -93,6 +95,9 @@ internal sealed class MatchmakingWorker(
         // dropped match.
         foreach (var player in players)
         {
+            // The room entry outlives the ticket on purpose: it is what sends a client that died
+            // mid-match back to the same room, long after the ticket that got it there expired.
+            await activeRooms.StoreAsync(player.UserId, new ActiveRoom(roomId, server.ClientEndpoint));
             await tickets.StoreAsync(
                 player.UserId,
                 new MatchTicket(roomId, server.ClientEndpoint, entryTokens.Issue(player.UserId, roomId)));

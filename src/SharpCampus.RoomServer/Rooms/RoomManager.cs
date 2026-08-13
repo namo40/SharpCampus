@@ -1,10 +1,9 @@
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
 using Cysharp.Threading;
 using Microsoft.Extensions.Options;
 using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.MasterData;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.Values;
 
@@ -13,6 +12,7 @@ namespace SharpCampus.RoomServer.Rooms;
 public sealed class RoomManager(
     ILogicLooperPool loopers,
     DuelRules rules,
+    IActiveRoomStore activeRooms,
     IOptions<RoomServerOptions> options,
     ILogger<RoomManager> logger)
 {
@@ -39,7 +39,7 @@ public sealed class RoomManager(
                 return CreateRoomOutcome.AtCapacity;
             }
 
-            var room = new DuelRoom(roomId, players, rules, NewSeed(), logger, Remove);
+            var room = new DuelRoom(roomId, players, rules, logger, Release);
             _rooms[roomId] = room;
             _ = ObserveAsync(room, loopers.RegisterActionAsync((in _) => room.Tick()));
             return CreateRoomOutcome.Created;
@@ -48,18 +48,9 @@ public sealed class RoomManager(
 
     internal bool TryGet(RoomId roomId, out DuelRoom? room) => _rooms.TryGetValue(roomId, out room);
 
-    // Seeds are per room and server-side: both boards deal from it, so a client that knew it could
-    // read the opponent's piece order.
-    private static ulong NewSeed()
-    {
-        Span<byte> bytes = stackalloc byte[sizeof(ulong)];
-        RandomNumberGenerator.Fill(bytes);
-        return BinaryPrimitives.ReadUInt64LittleEndian(bytes);
-    }
-
     // A tick that throws reaches no catch anywhere: LogicLooper hands the exception to the registration
     // task and quietly unregisters the action. Unobserved, that is a room that never ticks again but
-    // still sits in the table as if it were running.
+    // still holds its seats and its players' return tickets.
     internal async Task ObserveAsync(DuelRoom room, Task ticking)
     {
         try
@@ -73,6 +64,15 @@ public sealed class RoomManager(
         }
     }
 
-    private void Remove(DuelRoom room)
-        => _rooms.TryRemove(new KeyValuePair<RoomId, DuelRoom>(room.RoomId, room));
+    // Runs on the loop thread as the room shuts down, so the Redis work is left to run on its own: both
+    // players are free to queue again the moment their entries are gone.
+    private void Release(DuelRoom room)
+    {
+        _rooms.TryRemove(new KeyValuePair<RoomId, DuelRoom>(room.RoomId, room));
+
+        foreach (var player in room.Players)
+        {
+            _ = activeRooms.ReleaseAsync(player.UserId);
+        }
+    }
 }

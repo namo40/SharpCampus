@@ -9,4 +9,6 @@ public sealed record DuelRules(
     int InputPerTickMax,
     int NextCount,
     int CountdownTicks,
-    int JoinTimeoutTicks);
+    int JoinTimeoutTicks,
+    int GraceTicks,
+    int RematchTimeoutTicks);

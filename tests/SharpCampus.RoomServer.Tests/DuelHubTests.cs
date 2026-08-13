@@ -77,6 +77,39 @@ public sealed class DuelHubTests : IDisposable
         }
     }
 
+    // The one place the client results round trip is exercised end to end: the room asks each client
+    // over its own connection and waits for what comes back.
+    [Fact]
+    public async Task RematchBothAccept_RunsASecondGameInTheSameRoom()
+    {
+        var roomId = CreateRoom();
+
+        var first = new RecordingReceiver { RematchReply = Task.FromResult(true) };
+        var second = new RecordingReceiver { RematchReply = Task.FromResult(true) };
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var firstHub = await ConnectAsync(first, _firstUser, cancellationToken);
+        var secondHub = await ConnectAsync(second, _secondUser, cancellationToken);
+
+        try
+        {
+            await firstHub.JoinAsync(Request(roomId, _firstUser));
+            await secondHub.JoinAsync(Request(roomId, _secondUser));
+
+            await first.Starting.WaitAsync(_timeout, cancellationToken);
+            await secondHub.ForfeitAsync();
+            await first.Ended.WaitAsync(_timeout, cancellationToken);
+
+            await WaitForSecondStartAsync(first, cancellationToken);
+            await WaitForSecondStartAsync(second, cancellationToken);
+        }
+        finally
+        {
+            await firstHub.DisposeAsync();
+            await secondHub.DisposeAsync();
+        }
+    }
+
     [Fact]
     public async Task Snapshot_ReturnsBothBoardsToAWaitingPlayer()
     {
@@ -179,6 +212,19 @@ public sealed class DuelHubTests : IDisposable
 
         Assert.Equal(CreateRoomOutcome.Created, outcome);
         return roomId;
+    }
+
+    // The second announcement has no waitable of its own: the receiver's start signal was spent on the
+    // first game.
+    private static async Task WaitForSecondStartAsync(RecordingReceiver receiver, CancellationToken cancellationToken)
+    {
+        using var giveUp = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        giveUp.CancelAfter(_timeout);
+
+        while (receiver.Started.Count < 2)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), giveUp.Token);
+        }
     }
 
     private async Task<JoinRoomResult> JoinAsync(JoinRoomRequest request, Guid connectedAs)

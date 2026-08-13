@@ -39,7 +39,16 @@ builder.Services.AddSingleton<ILogicLooperPool>(provider => new LogicLooperPool(
     RoundRobinLogicLooperPoolBalancer.Instance));
 builder.Services.AddSingleton<RoomManager>();
 builder.Services.AddHostedService<RoomRegistryHeartbeat>();
-builder.Services.AddMagicOnion(options => options.MessageSerializer = ContractSerialization.Provider);
+builder.Services.AddMagicOnion(options =>
+{
+    options.MessageSerializer = ContractSerialization.Provider;
+
+    // A connection that dies silently has to be noticed well inside the room's disconnect grace, or the
+    // seat would sit there until the operating system gives up on the socket.
+    options.EnableStreamingHubHeartbeat = true;
+    options.StreamingHubHeartbeatInterval = TimeSpan.FromSeconds(1);
+    options.StreamingHubHeartbeatTimeout = TimeSpan.FromSeconds(5);
+});
 
 var app = builder.Build();
 

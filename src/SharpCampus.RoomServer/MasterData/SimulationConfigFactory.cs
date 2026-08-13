@@ -49,6 +49,8 @@ public static class SimulationConfigFactory
             config.InputPerTickMax,
             config.NextCount,
             config.CountdownSec * config.TickRate,
-            config.JoinTimeoutSec * config.TickRate);
+            config.JoinTimeoutSec * config.TickRate,
+            config.GraceTicks,
+            config.RematchTimeoutSec * config.TickRate);
     }
 }

@@ -1,6 +1,8 @@
 using Cysharp.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using SharpCampus.RoomServer.Rooms;
+using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.Values;
@@ -77,10 +79,11 @@ public class RoomManagerTests
     }
 
     [Fact]
-    public async Task RoomWhoseTickThrew_IsTornDownInsteadOfLingering()
+    public async Task RoomWhoseTickThrew_IsTornDownAndLetsItsPlayersQueueAgain()
     {
         using var pool = new ManualLogicLooperPool(20);
-        var manager = CreateManager(pool);
+        var activeRooms = RoomFixture.ActiveRooms();
+        var manager = CreateManager(pool, activeRooms: activeRooms);
         var roomId = new RoomId(Ulid.NewUlid());
         manager.Create(roomId, RoomFixture.Players());
         manager.TryGet(roomId, out var room);
@@ -89,6 +92,8 @@ public class RoomManagerTests
 
         Assert.True(room!.IsClosed);
         Assert.Equal(0, manager.RoomCount);
+        await activeRooms.Received(1).ReleaseAsync(RoomFixture.FirstUser);
+        await activeRooms.Received(1).ReleaseAsync(RoomFixture.SecondUser);
     }
 
     [Fact]
@@ -109,10 +114,29 @@ public class RoomManagerTests
         Assert.True(orders.Count > 1);
     }
 
-    private static RoomManager CreateManager(ILogicLooperPool pool, int capacity = 100, int joinTimeoutTicks = 5)
+    [Fact]
+    public void ClosedRoom_LetsBothPlayersQueueAgain()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var activeRooms = RoomFixture.ActiveRooms();
+        var manager = CreateManager(pool, joinTimeoutTicks: 2, activeRooms: activeRooms);
+        manager.Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
+
+        pool.Tick(2);
+
+        activeRooms.Received(1).ReleaseAsync(RoomFixture.FirstUser);
+        activeRooms.Received(1).ReleaseAsync(RoomFixture.SecondUser);
+    }
+
+    private static RoomManager CreateManager(
+        ILogicLooperPool pool,
+        int capacity = 100,
+        int joinTimeoutTicks = 5,
+        IActiveRoomStore? activeRooms = null)
         => new(
             pool,
             RoomFixture.Rules(joinTimeoutTicks: joinTimeoutTicks),
+            activeRooms ?? RoomFixture.ActiveRooms(),
             RoomFixture.Options(capacity),
             NullLogger<RoomManager>.Instance);
 

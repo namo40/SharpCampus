@@ -24,6 +24,21 @@ internal static partial class RoomLog
         DuelOutcome outcome,
         MatchEndReason reason);
 
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} lost {playerIndex}, holding the seat for {graceTicks} ticks")]
+    public static partial void RoomSeatLost(this ILogger logger, RoomId roomId, int playerIndex, int graceTicks);
+
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} took {playerIndex} back")]
+    public static partial void RoomSeatResumed(this ILogger logger, RoomId roomId, int playerIndex);
+
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} rematching with seed {seed}")]
+    public static partial void RoomRematching(this ILogger logger, RoomId roomId, ulong seed);
+
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} rematch declined")]
+    public static partial void RoomRematchDeclined(this ILogger logger, RoomId roomId);
+
+    [ZLoggerMessage(LogLevel.Information, "Room {roomId} got no rematch answer from {playerIndex}: {reason}")]
+    public static partial void RoomRematchUnanswered(this ILogger logger, RoomId roomId, int playerIndex, string reason);
+
     [ZLoggerMessage(LogLevel.Information, "Room {roomId} closed from {state}")]
     public static partial void RoomClosed(this ILogger logger, RoomId roomId, RoomState state);
 

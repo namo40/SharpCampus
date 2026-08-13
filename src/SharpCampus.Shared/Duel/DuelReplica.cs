@@ -39,9 +39,23 @@ public sealed class DuelReplica
     /// </summary>
     public bool HasMissedTicks { get; private set; }
 
-    /// <summary>Records the announced match.</summary>
+    /// <summary>Records the announced match and clears everything the previous one left behind.</summary>
     /// <param name="info">Seats and countdown as broadcast.</param>
-    public void ApplyMatchStart(MatchStartInfo info) => MatchStart = info;
+    // A room announces every game it runs, so this is also what makes a replica reusable across a
+    // rematch: the boards go back to empty and stay there until the next snapshot arrives.
+    public void ApplyMatchStart(MatchStartInfo info)
+    {
+        MatchStart = info;
+        Result = null;
+        Tick = default;
+        IsReady = false;
+        HasMissedTicks = false;
+
+        foreach (var board in _boards)
+        {
+            board.Clear();
+        }
+    }
 
     /// <summary>Replaces both boards with a full read of the server's state.</summary>
     /// <param name="snapshot">Boards as of some tick.</param>
