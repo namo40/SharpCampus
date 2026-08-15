@@ -206,8 +206,8 @@ public sealed class DuelHubTests : IDisposable
         var roomId = new RoomId(Ulid.NewUlid());
 
         var outcome = _factory.Rooms.Create(roomId, [
-            new RoomPlayer(new UserId(_firstUser), "alpha"),
-            new RoomPlayer(new UserId(_secondUser), "beta"),
+            new RoomPlayer(new UserId(_firstUser), "alpha", RoomFixture.PaidSkin),
+            new RoomPlayer(new UserId(_secondUser), "beta", RoomFixture.FreeSkin),
         ]);
 
         Assert.Equal(CreateRoomOutcome.Created, outcome);

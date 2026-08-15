@@ -4,6 +4,7 @@ using SharpCampus.RoomServer.MasterData;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Identity;
+using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.Values;
 using Xunit;
 
@@ -37,6 +38,37 @@ public class DuelRoomTests
         room.Tick();
 
         Assert.Single(receiver.Deltas);
+    }
+
+    [Fact]
+    public void MatchStart_DressesEachBoardInItsOwnOwnersSkin()
+    {
+        var receiver = new RecordingReceiver();
+        SeatedRoom(RoomFixture.Group(receiver), RoomFixture.Rules());
+
+        var starting = Assert.Single(receiver.Started);
+
+        Assert.Equal(
+            [RoomFixture.PaidSkin, RoomFixture.FreeSkin],
+            starting.Players.Select(player => player.Skin.SkinId));
+    }
+
+    [Fact]
+    public void SkinMasterDataNoLongerHas_FallsBackToTheFreeOne()
+    {
+        var receiver = new RecordingReceiver();
+        SeatedRoom(
+            RoomFixture.Group(receiver),
+            RoomFixture.Rules(),
+            players:
+            [
+                new RoomPlayer(RoomFixture.FirstUser, "one", new SkinId("RETIRED")),
+                new RoomPlayer(RoomFixture.SecondUser, "two", RoomFixture.FreeSkin),
+            ]);
+
+        var starting = Assert.Single(receiver.Started);
+
+        Assert.All(starting.Players, player => Assert.Equal(RoomFixture.FreeSkin, player.Skin.SkinId));
     }
 
     [Fact]
@@ -214,6 +246,7 @@ public class DuelRoomTests
             _roomId,
             RoomFixture.Players(),
             RoomFixture.Rules(joinTimeoutTicks: 2),
+            RoomFixture.MasterData(),
             NullLogger.Instance,
             RoomFixture.Publisher(),
             closing => released = closing);
@@ -578,17 +611,25 @@ public class DuelRoomTests
         .SelectMany(delta => delta.Events)
         .Count(duelEvent => duelEvent.Kind == TickEventKind.PieceLocked);
 
-    private static DuelRoom CreateRoom(DuelRules rules, RecordingPublisher? publisher = null)
+    private static DuelRoom CreateRoom(
+        DuelRules rules,
+        RecordingPublisher? publisher = null,
+        RoomPlayer[]? players = null)
         => new(
             _roomId,
-            RoomFixture.Players(),
+            players ?? RoomFixture.Players(),
             rules,
+            RoomFixture.MasterData(),
             NullLogger.Instance,
             publisher ?? RoomFixture.Publisher());
 
-    private static DuelRoom SeatedRoom(FakeGroup group, DuelRules rules, RecordingPublisher? publisher = null)
+    private static DuelRoom SeatedRoom(
+        FakeGroup group,
+        DuelRules rules,
+        RecordingPublisher? publisher = null,
+        RoomPlayer[]? players = null)
     {
-        var room = CreateRoom(rules, publisher);
+        var room = CreateRoom(rules, publisher, players);
         room.Join(group, RoomFixture.FirstUser, RoomFixture.Connections[0]);
         room.Join(group, RoomFixture.SecondUser, RoomFixture.Connections[1]);
         return room;

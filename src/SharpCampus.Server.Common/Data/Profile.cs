@@ -10,6 +10,8 @@ public sealed record Profile(UserId UserId, string Nickname)
 
     public Rating Rating { get; init; }
 
+    public SkinId EquippedSkinId { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset UpdatedAt { get; init; }

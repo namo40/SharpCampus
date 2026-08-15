@@ -30,7 +30,8 @@ public sealed class ProfileValuesTests
     [Fact]
     public void ProfileValues_TravelInsideADto()
     {
-        var profile = new ProfileResponse(UserId.New(), "boardsweeper", new Coins(4200), new Rating(1180));
+        var profile = new ProfileResponse(
+            UserId.New(), "boardsweeper", new Coins(4200), new Rating(1180), new SkinId("MONO"));
 
         Assert.Equal(profile, Deserialize<ProfileResponse>(Serialize(profile)));
     }

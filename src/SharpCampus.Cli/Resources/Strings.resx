@@ -125,7 +125,7 @@
     <value>The opponent never arrived.</value>
   </data>
   <data name="ProfileSummary" xml:space="preserve">
-    <value>{0} coins, rating {1}</value>
+    <value>{0} coins, rating {1}, skin {2}</value>
   </data>
   <data name="Queued" xml:space="preserve">
     <value>Queued. Waiting for an opponent...</value>
@@ -196,6 +196,42 @@
   <data name="SessionExpired" xml:space="preserve">
     <value>Session expired or invalid. Run: login &lt;email&gt; &lt;password&gt;</value>
   </data>
+  <data name="ShopAlreadyOwned" xml:space="preserve">
+    <value>You already own {0}.</value>
+  </data>
+  <data name="ShopBalance" xml:space="preserve">
+    <value>Balance: {0} coins</value>
+  </data>
+  <data name="ShopColumnPrice" xml:space="preserve">
+    <value>Price</value>
+  </data>
+  <data name="ShopColumnSkin" xml:space="preserve">
+    <value>Skin</value>
+  </data>
+  <data name="ShopColumnStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="ShopEquipped" xml:space="preserve">
+    <value>Now wearing {0}.</value>
+  </data>
+  <data name="ShopInsufficientCoins" xml:space="preserve">
+    <value>Not enough coins.</value>
+  </data>
+  <data name="ShopNotOwned" xml:space="preserve">
+    <value>{0} has to be bought first.</value>
+  </data>
+  <data name="ShopPurchased" xml:space="preserve">
+    <value>Bought {0}.</value>
+  </data>
+  <data name="ShopStatusEquipped" xml:space="preserve">
+    <value>equipped</value>
+  </data>
+  <data name="ShopStatusOwned" xml:space="preserve">
+    <value>owned</value>
+  </data>
+  <data name="ShopUnknownSkin" xml:space="preserve">
+    <value>There is no skin called {0}.</value>
+  </data>
   <data name="SignedUp" xml:space="preserve">
     <value>Signed up as {0}.</value>
   </data>
@@ -213,5 +249,23 @@
   </data>
   <data name="WindowTooSmall" xml:space="preserve">
     <value>The console window is smaller than {0}x{1}. The frame may wrap.</value>
+  </data>
+  <data name="skin.classic.name" xml:space="preserve">
+    <value>Classic</value>
+  </data>
+  <data name="skin.mono.name" xml:space="preserve">
+    <value>Mono</value>
+  </data>
+  <data name="skin.neon.name" xml:space="preserve">
+    <value>Neon</value>
+  </data>
+  <data name="skin.pastel.name" xml:space="preserve">
+    <value>Pastel</value>
+  </data>
+  <data name="skin.retro.name" xml:space="preserve">
+    <value>Retro</value>
+  </data>
+  <data name="skin.terminal.name" xml:space="preserve">
+    <value>Terminal</value>
   </data>
 </root>

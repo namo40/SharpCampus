@@ -26,6 +26,6 @@ public sealed class AccountService(IUserContext userContext, IProfileRepository 
         var profile = await profiles.GetAsync(userId)
                       ?? throw new InvalidOperationException($"Profile '{userId}' disappeared right after it was created.");
 
-        return new ProfileResponse(userId, profile.Nickname, profile.Coins, profile.Rating);
+        return new ProfileResponse(userId, profile.Nickname, profile.Coins, profile.Rating, profile.EquippedSkinId);
     }
 }

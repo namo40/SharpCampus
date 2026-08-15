@@ -8,6 +8,7 @@ using SharpCampus.RoomServer.MasterData;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Values;
 
 namespace SharpCampus.RoomServer.Rooms;
@@ -28,6 +29,7 @@ internal sealed class DuelRoom
     private readonly ConcurrentQueue<RoomCommand> _commands = new();
     private readonly object _mailboxGate = new();
     private readonly RoomPlayer[] _players;
+    private readonly Skin[] _skins;
     private readonly DuelRules _rules;
     private readonly ILogger _logger;
     private readonly IAsyncPublisher<MatchFinishedEvent> _matchFinished;
@@ -46,12 +48,16 @@ internal sealed class DuelRoom
         RoomId roomId,
         RoomPlayer[] players,
         DuelRules rules,
+        MemoryDatabase masterData,
         ILogger logger,
         IAsyncPublisher<MatchFinishedEvent> matchFinished,
         Action<DuelRoom>? onClosed = null)
     {
         RoomId = roomId;
         _players = players;
+
+        // Resolved once: the seating plan is fixed for the life of the room, rematches included.
+        _skins = Resolve(masterData, players);
         _rules = rules;
         _logger = logger;
         _matchFinished = matchFinished;
@@ -133,6 +139,22 @@ internal sealed class DuelRoom
 
         Close();
         return false;
+    }
+
+    // A skin master data has since dropped is not worth failing a match over, and every account owns the
+    // free one.
+    private static Skin[] Resolve(MemoryDatabase masterData, RoomPlayer[] players)
+    {
+        var skins = new Skin[players.Length];
+
+        for (var seat = 0; seat < players.Length; seat++)
+        {
+            skins[seat] = masterData.SkinTable.TryFindBySkinId(players[seat].EquippedSkinId, out var skin)
+                ? skin
+                : masterData.SkinTable.FreeSkin;
+        }
+
+        return skins;
     }
 
     // Seeds are per game and server-side: both boards deal from one, so a client that knew it could
@@ -425,8 +447,8 @@ internal sealed class DuelRoom
 
     private MatchStartInfo StartInfo() => new(
         [
-            new MatchPlayerInfo(new PlayerIndex(0), _players[0].DisplayName),
-            new MatchPlayerInfo(new PlayerIndex(1), _players[1].DisplayName),
+            new MatchPlayerInfo(new PlayerIndex(0), _players[0].DisplayName, _skins[0]),
+            new MatchPlayerInfo(new PlayerIndex(1), _players[1].DisplayName, _skins[1]),
         ],
         _rules.CountdownTicks,
         _rules.NextCount);

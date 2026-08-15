@@ -42,6 +42,7 @@ public class RoomControlServiceTests
         => new(
             pool,
             RoomFixture.Rules(),
+            RoomFixture.MasterData(),
             RoomFixture.ActiveRooms(),
             RoomFixture.Options(capacity),
             RoomFixture.Publisher(),

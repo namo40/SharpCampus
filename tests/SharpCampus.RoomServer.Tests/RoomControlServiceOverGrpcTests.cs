@@ -26,8 +26,8 @@ public sealed class RoomControlServiceOverGrpcTests : IDisposable
         var client = MagicOnionClient.Create<IRoomControlService>(channel, ContractSerialization.Provider);
 
         var result = await client.CreateRoomAsync(new CreateRoomRequest(roomId, [
-            new RoomPlayer(first, "alpha"),
-            new RoomPlayer(second, "beta"),
+            new RoomPlayer(first, "alpha", RoomFixture.PaidSkin),
+            new RoomPlayer(second, "beta", RoomFixture.FreeSkin),
         ]));
 
         Assert.Equal(CreateRoomOutcome.Created, result.Outcome);
@@ -40,7 +40,7 @@ public sealed class RoomControlServiceOverGrpcTests : IDisposable
     public async Task CreateRoom_TwiceUnderTheSameIdIsRefused()
     {
         var roomId = new RoomId(Ulid.NewUlid());
-        var players = new[] { new RoomPlayer(new UserId(Guid.NewGuid()), "alpha") };
+        var players = new[] { new RoomPlayer(new UserId(Guid.NewGuid()), "alpha", RoomFixture.FreeSkin) };
 
         using var channel = _factory.CreateChannel();
         var client = MagicOnionClient.Create<IRoomControlService>(channel, ContractSerialization.Provider);
@@ -61,7 +61,7 @@ public sealed class RoomControlServiceOverGrpcTests : IDisposable
 
         var result = await client.CreateRoomAsync(new CreateRoomRequest(
             new RoomId(Ulid.NewUlid()),
-            [new RoomPlayer(new UserId(Guid.NewGuid()), "alpha")]));
+            [new RoomPlayer(new UserId(Guid.NewGuid()), "alpha", RoomFixture.FreeSkin)]));
 
         Assert.Equal(CreateRoomOutcome.Created, result.Outcome);
     }

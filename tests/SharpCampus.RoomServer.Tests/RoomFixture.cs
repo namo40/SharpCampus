@@ -11,6 +11,7 @@ using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Values;
 using Xunit;
 
@@ -143,6 +144,9 @@ internal static class RoomFixture
     public static readonly UserId FirstUser = new(Guid.Parse("11111111-1111-1111-1111-111111111111"));
     public static readonly UserId SecondUser = new(Guid.Parse("22222222-2222-2222-2222-222222222222"));
 
+    public static readonly SkinId FreeSkin = new("CLASSIC");
+    public static readonly SkinId PaidSkin = new("MONO");
+
     public static readonly Guid[] Connections =
     [
         Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -150,7 +154,16 @@ internal static class RoomFixture
     ];
 
     public static RoomPlayer[] Players() =>
-        [new RoomPlayer(FirstUser, "one"), new RoomPlayer(SecondUser, "two")];
+        [new RoomPlayer(FirstUser, "one", PaidSkin), new RoomPlayer(SecondUser, "two", FreeSkin)];
+
+    // Only the skin table: the tick rules a room runs on come from Rules() rather than from master data.
+    public static MemoryDatabase MasterData()
+    {
+        var builder = new DatabaseBuilder();
+        builder.Append([NewSkin(FreeSkin, 0), NewSkin(PaidSkin, 200)]);
+
+        return new MemoryDatabase(builder.Build());
+    }
 
     public static IOptions<RoomServerOptions> Options(int capacity = 100) =>
         Microsoft.Extensions.Options.Options.Create(new RoomServerOptions
@@ -213,4 +226,20 @@ internal static class RoomFixture
         Assert.Equal(RoomState.Playing, room.State);
         return room;
     }
+
+    private static Skin NewSkin(SkinId skinId, int price) => new()
+    {
+        SkinId = skinId,
+        NameKey = $"skin.{skinId.AsPrimitive().ToLowerInvariant()}.name",
+        Price = new Coins(price),
+        BlockGlyph = "[]",
+        ColorI = "Cyan",
+        ColorO = "Yellow",
+        ColorT = "Magenta",
+        ColorS = "Green",
+        ColorZ = "Red",
+        ColorJ = "Blue",
+        ColorL = "DarkYellow",
+        ColorGarbage = "DarkGray",
+    };
 }

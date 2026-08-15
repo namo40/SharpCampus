@@ -63,6 +63,7 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(provider.GetRequiredService<IOptions<DatabaseOptions>>().Value.ConnectionString));
 
         services.AddScoped<IProfileRepository, ProfileRepository>();
+        services.AddScoped<IShopRepository, ShopRepository>();
         return services;
     }
 

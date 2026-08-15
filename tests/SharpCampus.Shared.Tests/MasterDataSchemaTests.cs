@@ -41,6 +41,14 @@ public sealed class MasterDataSchemaTests
     }
 
     [Fact]
+    public void FreeSkin_IsResolvedOnceTheDatabaseIsBuilt()
+    {
+        var database = new MasterDataSample().ToDatabase();
+
+        Assert.Equal(new SkinId("CLASSIC"), database.SkinTable.FreeSkin.SkinId);
+    }
+
+    [Fact]
     public void Binary_PreservesValueObjectsAndEnums()
     {
         var database = new MasterDataSample().ToDatabase();

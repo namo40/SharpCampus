@@ -40,6 +40,15 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
         WithWebHostBuilder(builder =>
             builder.ConfigureTestServices(services => services.AddScoped(_ => profiles)));
 
+    // The shop reads the profile and writes the purchase through two stores, so both are doubled together.
+    public WebApplicationFactory<Program> WithShop(IProfileRepository profiles, IShopRepository shop) =>
+        WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => profiles);
+                services.AddScoped(_ => shop);
+            }));
+
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.ConfigureTestServices(services =>
         {

@@ -5,6 +5,7 @@ using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Values;
 
@@ -21,9 +22,13 @@ internal sealed class MatchmakingWorker(
     IRoomControlClient roomControl,
     EntryTokenService entryTokens,
     IServiceScopeFactory scopes,
+    MemoryDatabase masterData,
     ILogger<MatchmakingWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan _period = TimeSpan.FromMilliseconds(500);
+
+    // What a profile row is created wearing, and so what an account without one is seated in.
+    private readonly SkinId _freeSkinId = masterData.SkinTable.FreeSkin.SkinId;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -76,11 +81,7 @@ internal sealed class MatchmakingWorker(
         }
 
         var roomId = new RoomId(Ulid.NewUlid());
-        var players = new[]
-        {
-            new RoomPlayer(first, await NicknameAsync(first)),
-            new RoomPlayer(second, await NicknameAsync(second)),
-        };
+        var players = new[] { await SeatAsync(first), await SeatAsync(second) };
 
         var result = await roomControl.CreateRoomAsync(server.ControlEndpoint, new CreateRoomRequest(roomId, players));
         if (result is not { Outcome: CreateRoomOutcome.Created })
@@ -112,12 +113,18 @@ internal sealed class MatchmakingWorker(
         return true;
     }
 
-    // The worker is a singleton and the profile store is scoped, so each lookup gets its own scope.
-    private async Task<string> NicknameAsync(UserId userId)
+    // Everything the room needs about an account comes from its profile, and an account that has never
+    // called the ApiServer has none yet. The worker is a singleton and the profile store is scoped, so
+    // each lookup gets its own scope.
+    private async Task<RoomPlayer> SeatAsync(UserId userId)
     {
         using var scope = scopes.CreateScope();
         var profiles = scope.ServiceProvider.GetRequiredService<IProfileRepository>();
+        var profile = await profiles.GetAsync(userId);
 
-        return (await profiles.GetAsync(userId))?.Nickname ?? NicknameRules.CreateInitial(userId);
+        return new RoomPlayer(
+            userId,
+            profile?.Nickname ?? NicknameRules.CreateInitial(userId),
+            profile?.EquippedSkinId ?? _freeSkinId);
     }
 }

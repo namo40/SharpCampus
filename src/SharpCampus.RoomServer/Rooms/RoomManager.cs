@@ -6,6 +6,7 @@ using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.MasterData;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Values;
 
 namespace SharpCampus.RoomServer.Rooms;
@@ -13,6 +14,7 @@ namespace SharpCampus.RoomServer.Rooms;
 public sealed class RoomManager(
     ILogicLooperPool loopers,
     DuelRules rules,
+    MemoryDatabase masterData,
     IActiveRoomStore activeRooms,
     IOptions<RoomServerOptions> options,
     IAsyncPublisher<MatchFinishedEvent> matchFinished,
@@ -41,7 +43,7 @@ public sealed class RoomManager(
                 return CreateRoomOutcome.AtCapacity;
             }
 
-            var room = new DuelRoom(roomId, players, rules, logger, matchFinished, Release);
+            var room = new DuelRoom(roomId, players, rules, masterData, logger, matchFinished, Release);
             _rooms[roomId] = room;
             _ = ObserveAsync(room, loopers.RegisterActionAsync((in _) => room.Tick()));
             return CreateRoomOutcome.Created;

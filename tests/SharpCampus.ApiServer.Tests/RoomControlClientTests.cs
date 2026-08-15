@@ -39,7 +39,7 @@ public class RoomControlClientTests
     private static CreateRoomRequest Request() => new(
         new RoomId(Ulid.NewUlid()),
         [
-            new RoomPlayer(new UserId(Guid.NewGuid()), "alpha"),
-            new RoomPlayer(new UserId(Guid.NewGuid()), "beta"),
+            new RoomPlayer(new UserId(Guid.NewGuid()), "alpha", new SkinId("CLASSIC")),
+            new RoomPlayer(new UserId(Guid.NewGuid()), "beta", new SkinId("MONO")),
         ]);
 }

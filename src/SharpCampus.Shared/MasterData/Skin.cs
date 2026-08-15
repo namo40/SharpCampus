@@ -65,5 +65,29 @@ public sealed record Skin : IValidatable<Skin>
         validator.Validate(
             x => Array.TrueForAll(x.PaletteColors(), color => color.Length > 0),
             "every palette color must be set");
+
+        // The renderer turns these into terminal colors, so a typo has to be caught here rather than
+        // surface as an unpainted board halfway through a match.
+        validator.Validate(
+            x => Array.TrueForAll(x.PaletteColors(), color => Enum.TryParse<ConsoleColor>(color, out _)),
+            "every palette color must name a ConsoleColor");
+
+        if (!validator.CallOnce())
+        {
+            return;
+        }
+
+        // The profile schema default and the fallback seat both assume a free skin exists, so a catalog
+        // without one is a data error to catch here, not a crash to have at pairing time.
+        var hasFreeSkin = false;
+        foreach (var skin in validator.GetTableSet().TableData)
+        {
+            hasFreeSkin |= skin.Price.AsPrimitive() == 0;
+        }
+
+        if (!hasFreeSkin)
+        {
+            validator.Fail("expected a skin that costs nothing, found none.");
+        }
     }
 }

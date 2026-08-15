@@ -1,4 +1,5 @@
 using System.Resources;
+using SharpCampus.Shared.Values;
 
 namespace SharpCampus.Cli.Resources;
 
@@ -55,12 +56,31 @@ internal static class Strings
     public static string ServerUnreachableDetail => Get(nameof(ServerUnreachableDetail));
     public static string ServerVersionLine => Get(nameof(ServerVersionLine));
     public static string SessionExpired => Get(nameof(SessionExpired));
+    public static string ShopAlreadyOwned => Get(nameof(ShopAlreadyOwned));
+    public static string ShopBalance => Get(nameof(ShopBalance));
+    public static string ShopColumnPrice => Get(nameof(ShopColumnPrice));
+    public static string ShopColumnSkin => Get(nameof(ShopColumnSkin));
+    public static string ShopColumnStatus => Get(nameof(ShopColumnStatus));
+    public static string ShopEquipped => Get(nameof(ShopEquipped));
+    public static string ShopInsufficientCoins => Get(nameof(ShopInsufficientCoins));
+    public static string ShopNotOwned => Get(nameof(ShopNotOwned));
+    public static string ShopPurchased => Get(nameof(ShopPurchased));
+    public static string ShopStatusEquipped => Get(nameof(ShopStatusEquipped));
+    public static string ShopStatusOwned => Get(nameof(ShopStatusOwned));
+    public static string ShopUnknownSkin => Get(nameof(ShopUnknownSkin));
     public static string SignUpFailed => Get(nameof(SignUpFailed));
     public static string SignedUp => Get(nameof(SignedUp));
     public static string StateFinished => Get(nameof(StateFinished));
     public static string StateGetReady => Get(nameof(StateGetReady));
     public static string WaitingForOpponent => Get(nameof(WaitingForOpponent));
     public static string WindowTooSmall => Get(nameof(WindowTooSmall));
+
+    // Skin names are keyed by the master data nameKey itself, so the catalog needs no table of its own here.
+    public static string SkinName(string nameKey) => _resources.GetString(nameKey) ?? nameKey;
+
+    // Where only the id is at hand, the key is rebuilt the way master data spells it.
+    public static string SkinName(SkinId skinId) =>
+        _resources.GetString($"skin.{skinId.AsPrimitive().ToLowerInvariant()}.name") ?? skinId.AsPrimitive();
 
     private static string Get(string name) => _resources.GetString(name)!;
 }

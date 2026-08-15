@@ -4,9 +4,12 @@
 
 DROP TABLE IF EXISTS profiles CASCADE;
 DROP TABLE IF EXISTS match_records CASCADE;
+DROP TABLE IF EXISTS owned_skins CASCADE;
 
 -- No foreign key to auth.users: user_id carries the `sub` claim of the verified access token, which keeps
 -- the account provider (Supabase today) replaceable without touching the game schema.
+-- The equipped_skin_id default has to spell the free skin's master data key exactly, because that is the
+-- skin a profile is created wearing.
 CREATE TABLE profiles (
     user_id           uuid        PRIMARY KEY,
     nickname          text        NOT NULL,
@@ -43,3 +46,13 @@ CREATE TABLE match_records (
 
 -- Every read of this table so far is one account's history, newest first.
 CREATE INDEX match_records_user_history ON match_records (user_id, created_at DESC);
+
+-- Only bought skins get a row: a skin that costs nothing is owned by every account, which is what keeps
+-- account creation from having to seed anything. The primary key is the whole defence against buying the
+-- same skin twice, including from two calls at once.
+CREATE TABLE owned_skins (
+    user_id     uuid        NOT NULL,
+    skin_id     text        NOT NULL,
+    acquired_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, skin_id)
+);

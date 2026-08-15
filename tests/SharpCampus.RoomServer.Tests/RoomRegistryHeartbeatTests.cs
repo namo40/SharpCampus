@@ -69,6 +69,7 @@ public class RoomRegistryHeartbeatTests
         => new(
             pool,
             RoomFixture.Rules(),
+            RoomFixture.MasterData(),
             RoomFixture.ActiveRooms(),
             options,
             RoomFixture.Publisher(),

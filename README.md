@@ -106,22 +106,33 @@ cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
 cli> whoami
 cli> nickname boardsweeper
+cli> skins
+cli> buy mono
+cli> equip mono
 cli> duel
 cli> logout
 ```
 
 `signup` and `login` talk to Supabase directly and store the resulting access token under your user profile;
 `whoami` sends that token to the ApiServer, which verifies it and answers with the account behind it plus its
-player profile — nickname, coins and rating. The first `whoami` is what creates that profile, under a nickname
+player profile — nickname, coins, rating and equipped skin. The first `whoami` is what creates that profile, under a nickname
 derived from the account id. `nickname` renames it: 2 to 16 letters, digits or underscores, unique across accounts
 and compared case-insensitively. Every command also works as a one-shot invocation, for example
 `dotnet run --project src/SharpCampus.Cli -- whoami`.
 
+`skins` lists the six cosmetic board themes with their coin prices, what you already own and what you
+are wearing. `buy` spends match winnings on one — the balance check, the coin debit and the ownership
+row settle in a single database transaction, so neither an overdraft nor a double purchase can slip
+through — and `equip` picks the theme your boards are drawn in from the next match on. The free theme
+is what every account starts with.
+
 `duel` joins the matchmaking queue and polls until an opponent turns up. The ApiServer pairs the two
 accounts, asks the least loaded room server to stand up a room for them, and answers each client with
-that room's address and a short-lived entry token; the client connects there and plays the match out
-with random inputs. Run it from two clients signed in as different accounts to see a match through. It
-stands in for the real, playable client.
+that room's address and a short-lived entry token; the client connects there and the match plays out
+live in the console: both boards side by side, your pieces under keyboard control, a rematch offer
+when it ends, and coins and rating settled to both profiles. Each board is drawn in its owner's
+equipped skin, on both screens. Run it from two clients signed in as different accounts to play
+against yourself.
 
 Stop the stack with `supabase stop` and the Redis container with `docker rm -f sharpcampus-redis` when
 you are done.

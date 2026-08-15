@@ -87,6 +87,24 @@ public sealed class MasterDataValidationTests
     }
 
     [Fact]
+    public void Validate_RejectsAPaletteColorTheConsoleHasNoNameFor()
+    {
+        var sample = new MasterDataSample();
+        sample.Skins[0] = MasterDataSample.NewSkin("CLASSIC", 0) with { ColorS = "Turquoise" };
+
+        Assert.Contains("must name a ConsoleColor", Failures(sample));
+    }
+
+    [Fact]
+    public void Validate_RejectsACatalogWhereEverySkinCostsSomething()
+    {
+        var sample = new MasterDataSample();
+        sample.Skins[0] = MasterDataSample.NewSkin("CLASSIC", 100);
+
+        Assert.Contains("costs nothing", Failures(sample));
+    }
+
+    [Fact]
     public void Validate_RejectsAMissionThatCanNeverBeStarted()
     {
         var sample = new MasterDataSample();

@@ -84,7 +84,7 @@ internal sealed class AccountCommands
 
             AnsiConsole.MarkupLineInterpolated($"[green]{identity.Email}[/] [grey]{identity.UserId}[/]");
             AnsiConsole.MarkupLineInterpolated(
-                $"[green]{profile.Nickname}[/] [grey]{Localization.Format(Strings.ProfileSummary, profile.Coins.AsPrimitive(), profile.Rating.AsPrimitive())}[/]");
+                $"[green]{profile.Nickname}[/] [grey]{Localization.Format(Strings.ProfileSummary, profile.Coins.AsPrimitive(), profile.Rating.AsPrimitive(), Strings.SkinName(profile.EquippedSkinId))}[/]");
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unauthenticated)
         {

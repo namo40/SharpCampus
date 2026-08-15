@@ -10,6 +10,8 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
 
     public DbSet<MatchRecord> MatchRecords => Set<MatchRecord>();
 
+    public DbSet<OwnedSkin> OwnedSkins => Set<OwnedSkin>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         // UnitGenerator emits these converters, but EF never finds them on its own: without this registration
@@ -18,12 +20,13 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
         configurationBuilder.Properties<Coins>().HaveConversion<Coins.CoinsValueConverter>();
         configurationBuilder.Properties<Rating>().HaveConversion<Rating.RatingValueConverter>();
         configurationBuilder.Properties<MatchId>().HaveConversion<MatchId.MatchIdValueConverter>();
+        configurationBuilder.Properties<SkinId>().HaveConversion<SkinId.SkinIdValueConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // The schema script owns the table, so this mapping only has to agree with it: no migrations are generated
-        // from the model, and columns the server never reads (equipped_skin_id) stay out of the model entirely.
+        // The schema script owns the tables, so this mapping only has to agree with it: no migrations are
+        // generated from the model.
         var profile = modelBuilder.Entity<Profile>();
 
         profile.ToTable("profiles");
@@ -37,6 +40,7 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
         // which is what makes a new profile start at the column defaults rather than at zero.
         profile.Property(p => p.Coins).HasColumnName("coins").ValueGeneratedOnAdd();
         profile.Property(p => p.Rating).HasColumnName("rating").ValueGeneratedOnAdd();
+        profile.Property(p => p.EquippedSkinId).HasColumnName("equipped_skin_id").ValueGeneratedOnAdd();
         profile.Property(p => p.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
         profile.Property(p => p.UpdatedAt).HasColumnName("updated_at").ValueGeneratedOnAdd();
 
@@ -61,5 +65,16 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
         record.Property(r => r.MaxCombo).HasColumnName("max_combo");
         record.Property(r => r.DurationTicks).HasColumnName("duration_ticks");
         record.Property(r => r.CreatedAt).HasColumnName("created_at").ValueGeneratedOnAdd();
+
+        var owned = modelBuilder.Entity<OwnedSkin>();
+
+        owned.ToTable("owned_skins");
+
+        // The pair is the key, which is what makes a second purchase of the same skin a violation.
+        owned.HasKey(o => new { o.UserId, o.SkinId });
+
+        owned.Property(o => o.UserId).HasColumnName("user_id");
+        owned.Property(o => o.SkinId).HasColumnName("skin_id");
+        owned.Property(o => o.AcquiredAt).HasColumnName("acquired_at").ValueGeneratedOnAdd();
     }
 }

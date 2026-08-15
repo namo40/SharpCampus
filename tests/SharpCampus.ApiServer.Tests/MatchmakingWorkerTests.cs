@@ -5,12 +5,16 @@ using NSubstitute;
 using SharpCampus.ApiServer.Matchmaking;
 using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.MasterData;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Internal.Rooms;
+using SharpCampus.Shared.MasterData;
+using SharpCampus.Shared.Profiles;
+using SharpCampus.Shared.Values;
 using Xunit;
 
 namespace SharpCampus.ApiServer.Tests;
@@ -21,6 +25,12 @@ public class MatchmakingWorkerTests
     private static readonly UserId _second = new(Guid.NewGuid());
     private static readonly UserId _third = new(Guid.NewGuid());
     private static readonly UserId _fourth = new(Guid.NewGuid());
+
+    private static readonly SkinId _classic = new("CLASSIC");
+    private static readonly SkinId _mono = new("MONO");
+
+    // The real data rather than a stand-in: which skin an account starts in is a master data answer.
+    private static readonly MemoryDatabase _masterData = MasterDataLoader.Load("masterdata");
 
     private static readonly RoomServerEntry _server =
         new("room-0", "http://localhost:5002", "http://localhost:5002", 0, 100);
@@ -39,8 +49,8 @@ public class MatchmakingWorkerTests
         _pairingLock.TryAcquireAsync().Returns(true);
         _registry.FindLeastLoadedAsync().Returns(_server);
         _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>()).Returns(CreateRoomResult.Created);
-        _profiles.GetAsync(_first).Returns(new Profile(_first, "alpha"));
-        _profiles.GetAsync(_second).Returns(new Profile(_second, "beta"));
+        _profiles.GetAsync(_first).Returns(new Profile(_first, "alpha") { EquippedSkinId = _mono });
+        _profiles.GetAsync(_second).Returns(new Profile(_second, "beta") { EquippedSkinId = _classic });
 
         // A queue that only gives up its members when the worker confirms the pairing, which is the
         // behaviour the whole peek-then-remove model rests on.
@@ -60,10 +70,26 @@ public class MatchmakingWorkerTests
         Assert.Equal([_first, _second], request.Players.Select(player => player.UserId));
         Assert.Equal(["alpha", "beta"], request.Players.Select(player => player.DisplayName));
 
+        // What each player equipped is fixed here, which is what makes it the same in a rematch.
+        Assert.Equal([_mono, _classic], request.Players.Select(player => player.EquippedSkinId));
+
         await _tickets.Received(1).StoreAsync(_first, Arg.Is<MatchTicket>(ticket => ticket.RoomId == request.RoomId));
         await _tickets.Received(1).StoreAsync(_second, Arg.Is<MatchTicket>(ticket => ticket.RoomId == request.RoomId));
 
         Assert.Empty(_waiting);
+    }
+
+    [Fact]
+    public async Task PlayerWhoNeverAskedTheApiServerForAnything_IsSeatedWithTheDefaultsAProfileWouldHave()
+    {
+        QueueHolds(_third, _fourth);
+
+        await CreateWorker().PairAsync();
+
+        var request = (CreateRoomRequest)_roomControl.ReceivedCalls().Single().GetArguments()[1]!;
+
+        Assert.All(request.Players, player => Assert.StartsWith(NicknameRules.InitialPrefix, player.DisplayName));
+        Assert.All(request.Players, player => Assert.Equal(_classic, player.EquippedSkinId));
     }
 
     [Fact]
@@ -231,6 +257,7 @@ public class MatchmakingWorkerTests
             _roomControl,
             EntryTokens(),
             scopes,
+            _masterData,
             NullLogger<MatchmakingWorker>.Instance);
     }
 }

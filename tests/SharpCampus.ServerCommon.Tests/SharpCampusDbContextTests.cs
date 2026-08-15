@@ -14,7 +14,8 @@ public sealed class SharpCampusDbContextTests
     public void Profiles_MapToTheColumnsOfTheSchemaScript()
     {
         var profile = FindProfileType();
-        string[] expected = ["coins", "created_at", "nickname", "rating", "updated_at", "user_id"];
+        string[] expected =
+            ["coins", "created_at", "equipped_skin_id", "nickname", "rating", "updated_at", "user_id"];
 
         Assert.Equal("profiles", profile.GetTableName());
         Assert.Equal(expected, profile.GetProperties().Select(p => p.GetColumnName()).Order());
@@ -28,6 +29,7 @@ public sealed class SharpCampusDbContextTests
         Assert.IsType<UserId.UserIdValueConverter>(FindConverter(profile, nameof(Profile.UserId)));
         Assert.IsType<Coins.CoinsValueConverter>(FindConverter(profile, nameof(Profile.Coins)));
         Assert.IsType<Rating.RatingValueConverter>(FindConverter(profile, nameof(Profile.Rating)));
+        Assert.IsType<SkinId.SkinIdValueConverter>(FindConverter(profile, nameof(Profile.EquippedSkinId)));
     }
 
     [Fact]
@@ -38,6 +40,7 @@ public sealed class SharpCampusDbContextTests
         Assert.Equal(ValueGenerated.Never, FindProperty(profile, nameof(Profile.UserId)).ValueGenerated);
         Assert.Equal(ValueGenerated.OnAdd, FindProperty(profile, nameof(Profile.Coins)).ValueGenerated);
         Assert.Equal(ValueGenerated.OnAdd, FindProperty(profile, nameof(Profile.Rating)).ValueGenerated);
+        Assert.Equal(ValueGenerated.OnAdd, FindProperty(profile, nameof(Profile.EquippedSkinId)).ValueGenerated);
     }
 
     [Fact]
@@ -83,6 +86,35 @@ public sealed class SharpCampusDbContextTests
 
         Assert.Equal(ValueGenerated.OnAdd, FindProperty(record, nameof(MatchRecord.CreatedAt)).ValueGenerated);
         Assert.Equal(ValueGenerated.Never, FindProperty(record, nameof(MatchRecord.RatingAfter)).ValueGenerated);
+    }
+
+    [Fact]
+    public void OwnedSkins_MapToTheColumnsOfTheSchemaScript()
+    {
+        var owned = FindEntityType(typeof(OwnedSkin));
+        string[] expected = ["acquired_at", "skin_id", "user_id"];
+
+        Assert.Equal("owned_skins", owned.GetTableName());
+        Assert.Equal(expected, owned.GetProperties().Select(p => p.GetColumnName()).Order());
+    }
+
+    [Fact]
+    public void AnOwnedSkin_IsKeyedByTheAccountAndTheSkinTogether()
+    {
+        var owned = FindEntityType(typeof(OwnedSkin));
+
+        Assert.Equal(
+            [nameof(OwnedSkin.UserId), nameof(OwnedSkin.SkinId)],
+            owned.FindPrimaryKey()!.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void AnOwnedSkinsTimestamp_IsLeftToTheDatabaseOnInsert()
+    {
+        var owned = FindEntityType(typeof(OwnedSkin));
+
+        Assert.Equal(ValueGenerated.OnAdd, FindProperty(owned, nameof(OwnedSkin.AcquiredAt)).ValueGenerated);
+        Assert.IsType<SkinId.SkinIdValueConverter>(FindConverter(owned, nameof(OwnedSkin.SkinId)));
     }
 
     private static IEntityType FindProfileType() => FindEntityType(typeof(Profile));

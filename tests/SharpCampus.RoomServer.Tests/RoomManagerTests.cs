@@ -136,6 +136,7 @@ public class RoomManagerTests
         => new(
             pool,
             RoomFixture.Rules(joinTimeoutTicks: joinTimeoutTicks),
+            RoomFixture.MasterData(),
             activeRooms ?? RoomFixture.ActiveRooms(),
             RoomFixture.Options(capacity),
             RoomFixture.Publisher(),

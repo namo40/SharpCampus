@@ -8,6 +8,7 @@ using SharpCampus.Cli.Duel;
 using SharpCampus.Cli.Resources;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Duel;
+using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Services;
 using SharpCampus.Shared.Values;
 using Spectre.Console;
@@ -200,7 +201,7 @@ internal sealed class DuelCommand
             AnsiConsole.MarkupLineInterpolated($"[green]{Strings.MatchResumed}[/]");
         }
 
-        var renderer = new DuelRenderer(seat.AsPrimitive(), DisplayNames(start), status);
+        var renderer = new DuelRenderer(seat.AsPrimitive(), DisplayNames(start), Skins(start), status);
         await new DuelSession(hub, receiver, renderer, auto).RunAsync(cancellationToken);
     }
 
@@ -388,5 +389,17 @@ internal sealed class DuelCommand
         }
 
         return names;
+    }
+
+    // The room sends each seat's skin along with its name, which is the only place the client gets one.
+    private static Skin[] Skins(MatchStartInfo start)
+    {
+        var skins = new Skin[2];
+        foreach (var player in start.Players)
+        {
+            skins[player.PlayerIndex.AsPrimitive()] = player.Skin;
+        }
+
+        return skins;
     }
 }

@@ -23,7 +23,10 @@ public class DuelContractSerializationTests
     public void MatchStartInfo_RoundTrips()
     {
         var info = new MatchStartInfo(
-            [new MatchPlayerInfo(new PlayerIndex(0), "a"), new MatchPlayerInfo(new PlayerIndex(1), "b")],
+            [
+                new MatchPlayerInfo(new PlayerIndex(0), "a", MasterDataSample.NewSkin("CLASSIC", 0)),
+                new MatchPlayerInfo(new PlayerIndex(1), "b", MasterDataSample.NewSkin("MONO", 200)),
+            ],
             60,
             5);
 
