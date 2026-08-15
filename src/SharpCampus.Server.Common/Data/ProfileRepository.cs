@@ -9,6 +9,12 @@ public sealed class ProfileRepository(SharpCampusDbContext db) : IProfileReposit
     public Task<Profile?> GetAsync(UserId userId) =>
         db.Profiles.AsNoTracking().SingleOrDefaultAsync(p => p.UserId == userId);
 
+    public async Task<IReadOnlyDictionary<UserId, string>> GetNicknamesAsync(IReadOnlyCollection<UserId> userIds) =>
+        await db.Profiles
+            .Where(p => userIds.Contains(p.UserId))
+            .Select(p => new { p.UserId, p.Nickname })
+            .ToDictionaryAsync(p => p.UserId, p => p.Nickname);
+
     public async Task CreateIfAbsentAsync(UserId userId, string nickname)
     {
         if (await db.Profiles.AnyAsync(p => p.UserId == userId))

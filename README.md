@@ -112,6 +112,8 @@ cli> equip mono
 cli> missions
 cli> claim win_1
 cli> duel
+cli> rank
+cli> rank daily
 cli> logout
 ```
 
@@ -140,6 +142,13 @@ live in the console: both boards side by side, your pieces under keyboard contro
 when it ends, and coins and rating settled to both profiles. Each board is drawn in its owner's
 equipped skin, on both screens. Run it from two clients signed in as different accounts to play
 against yourself.
+
+`rank` lists the first hundred places of the rating board with your own row highlighted, and adds it
+under a break when you sit further down than the hundredth. `rank daily` reads the same board for the
+wins settled today, by UTC date. Both are Redis sorted sets the room server writes to as each match
+settles — Postgres stays the source of truth, so a push that never lands leaves a board to rebuild
+rather than a payout to recover. The daily board carries its date in the key and expires on its own,
+which is the whole of the daily reset.
 
 Stop the stack with `supabase stop` and the Redis container with `docker rm -f sharpcampus-redis` when
 you are done.

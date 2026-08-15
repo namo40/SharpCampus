@@ -12,6 +12,7 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.Leaderboards;
 using StackExchange.Redis;
 
 namespace SharpCampus.ApiServer.Tests;
@@ -56,6 +57,20 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
             {
                 services.AddScoped(_ => profiles);
                 services.AddScoped(_ => missions);
+            }));
+
+    // The places come from Redis and the names beside them from the profile store, and the clock decides
+    // which day's board a call even asks for, so all three are the test's.
+    public WebApplicationFactory<Program> WithLeaderboards(
+        IProfileRepository profiles,
+        ILeaderboardStore leaderboard,
+        TimeProvider time) =>
+        WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => profiles);
+                services.AddSingleton(leaderboard);
+                services.AddSingleton(time);
             }));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>

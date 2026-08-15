@@ -54,6 +54,7 @@ app.MapMagicOnionService([
     typeof(ProfileService),
     typeof(ShopService),
     typeof(MissionService),
+    typeof(LeaderboardService),
     typeof(MatchmakingService),
 ]);
 

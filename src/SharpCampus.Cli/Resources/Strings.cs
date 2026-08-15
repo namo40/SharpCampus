@@ -48,6 +48,15 @@ internal static class Strings
     public static string QueueLeft => Get(nameof(QueueLeft));
     public static string QueueReleased => Get(nameof(QueueReleased));
     public static string Queued => Get(nameof(Queued));
+    public static string RankColumnPlayer => Get(nameof(RankColumnPlayer));
+    public static string RankColumnRank => Get(nameof(RankColumnRank));
+    public static string RankColumnRating => Get(nameof(RankColumnRating));
+    public static string RankColumnWins => Get(nameof(RankColumnWins));
+    public static string RankEmpty => Get(nameof(RankEmpty));
+    public static string RankTitleDaily => Get(nameof(RankTitleDaily));
+    public static string RankTitleRating => Get(nameof(RankTitleRating));
+    public static string RankUnranked => Get(nameof(RankUnranked));
+    public static string RankUsage => Get(nameof(RankUsage));
     public static string ReasonAborted => Get(nameof(ReasonAborted));
     public static string ReasonDisconnect => Get(nameof(ReasonDisconnect));
     public static string ReasonForfeit => Get(nameof(ReasonForfeit));

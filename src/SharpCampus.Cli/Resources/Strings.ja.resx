@@ -172,6 +172,33 @@
   <data name="QueueReleased" xml:space="preserve">
     <value>マッチせずに待機列から外れました。もう一度お試しください。</value>
   </data>
+  <data name="RankColumnPlayer" xml:space="preserve">
+    <value>プレイヤー</value>
+  </data>
+  <data name="RankColumnRank" xml:space="preserve">
+    <value>順位</value>
+  </data>
+  <data name="RankColumnRating" xml:space="preserve">
+    <value>レーティング</value>
+  </data>
+  <data name="RankColumnWins" xml:space="preserve">
+    <value>勝利数</value>
+  </data>
+  <data name="RankEmpty" xml:space="preserve">
+    <value>このランキングに載っているプレイヤーはまだいません。</value>
+  </data>
+  <data name="RankTitleDaily" xml:space="preserve">
+    <value>今日の勝利数ランキング（UTC の日付基準）</value>
+  </data>
+  <data name="RankTitleRating" xml:space="preserve">
+    <value>レーティングランキング</value>
+  </data>
+  <data name="RankUnranked" xml:space="preserve">
+    <value>まだこのランキングに載っていません。</value>
+  </data>
+  <data name="RankUsage" xml:space="preserve">
+    <value>使い方: rank [daily]</value>
+  </data>
   <data name="ReasonAborted" xml:space="preserve">
     <value>中断</value>
   </data>

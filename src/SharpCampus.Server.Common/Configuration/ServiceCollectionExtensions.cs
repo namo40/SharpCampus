@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using SharpCampus.Server.Common.Authentication;
 using SharpCampus.Server.Common.Data;
+using SharpCampus.Server.Common.Leaderboards;
 using SharpCampus.Server.Common.MasterData;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
@@ -80,6 +81,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
         services.AddSingleton<IRoomRegistry, RedisRoomRegistry>();
         services.AddSingleton<IActiveRoomStore, RedisActiveRoomStore>();
+        services.AddSingleton<ILeaderboardStore, RedisLeaderboardStore>();
         return services;
     }
 

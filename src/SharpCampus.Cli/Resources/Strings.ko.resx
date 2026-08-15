@@ -172,6 +172,33 @@
   <data name="QueueReleased" xml:space="preserve">
     <value>매칭되지 않은 채 대기열에서 해제되었습니다. 다시 시도하세요.</value>
   </data>
+  <data name="RankColumnPlayer" xml:space="preserve">
+    <value>플레이어</value>
+  </data>
+  <data name="RankColumnRank" xml:space="preserve">
+    <value>순위</value>
+  </data>
+  <data name="RankColumnRating" xml:space="preserve">
+    <value>레이팅</value>
+  </data>
+  <data name="RankColumnWins" xml:space="preserve">
+    <value>승수</value>
+  </data>
+  <data name="RankEmpty" xml:space="preserve">
+    <value>아직 이 순위표에 오른 플레이어가 없습니다.</value>
+  </data>
+  <data name="RankTitleDaily" xml:space="preserve">
+    <value>오늘의 승수 순위 (UTC 날짜 기준)</value>
+  </data>
+  <data name="RankTitleRating" xml:space="preserve">
+    <value>레이팅 순위</value>
+  </data>
+  <data name="RankUnranked" xml:space="preserve">
+    <value>아직 이 순위표에 오르지 않았습니다.</value>
+  </data>
+  <data name="RankUsage" xml:space="preserve">
+    <value>사용법: rank [daily]</value>
+  </data>
   <data name="ReasonAborted" xml:space="preserve">
     <value>중단</value>
   </data>

@@ -172,6 +172,33 @@
   <data name="QueueReleased" xml:space="preserve">
     <value>The queue let you go without a match. Try again.</value>
   </data>
+  <data name="RankColumnPlayer" xml:space="preserve">
+    <value>Player</value>
+  </data>
+  <data name="RankColumnRank" xml:space="preserve">
+    <value>Rank</value>
+  </data>
+  <data name="RankColumnRating" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="RankColumnWins" xml:space="preserve">
+    <value>Wins</value>
+  </data>
+  <data name="RankEmpty" xml:space="preserve">
+    <value>Nobody has reached this board yet.</value>
+  </data>
+  <data name="RankTitleDaily" xml:space="preserve">
+    <value>Today's wins, by UTC date</value>
+  </data>
+  <data name="RankTitleRating" xml:space="preserve">
+    <value>Rating board</value>
+  </data>
+  <data name="RankUnranked" xml:space="preserve">
+    <value>You are not on this board yet.</value>
+  </data>
+  <data name="RankUsage" xml:space="preserve">
+    <value>Usage: rank [daily]</value>
+  </data>
   <data name="ReasonAborted" xml:space="preserve">
     <value>abandoned</value>
   </data>

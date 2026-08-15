@@ -53,4 +53,7 @@ internal static partial class RoomLog
 
     [ZLoggerMessage(LogLevel.Error, "Match {matchId} did not reach the daily missions: {reason}")]
     public static partial void MissionProgressFailed(this ILogger logger, MatchId matchId, string reason);
+
+    [ZLoggerMessage(LogLevel.Error, "Match {matchId} did not reach the leaderboards: {reason}")]
+    public static partial void LeaderboardPushFailed(this ILogger logger, MatchId matchId, string reason);
 }
