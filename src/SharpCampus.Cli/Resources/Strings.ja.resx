@@ -100,6 +100,42 @@
   <data name="Matched" xml:space="preserve">
     <value>{1} のルーム {0} にマッチしました。</value>
   </data>
+  <data name="MissionAlreadyClaimed" xml:space="preserve">
+    <value>{0} の報酬は今日すでに受け取っています。</value>
+  </data>
+  <data name="MissionClaimed" xml:space="preserve">
+    <value>{0} の報酬を受け取りました。</value>
+  </data>
+  <data name="MissionColumnMission" xml:space="preserve">
+    <value>ミッション</value>
+  </data>
+  <data name="MissionColumnProgress" xml:space="preserve">
+    <value>進捗</value>
+  </data>
+  <data name="MissionColumnReward" xml:space="preserve">
+    <value>報酬</value>
+  </data>
+  <data name="MissionColumnStatus" xml:space="preserve">
+    <value>状態</value>
+  </data>
+  <data name="MissionNotCompleted" xml:space="preserve">
+    <value>{0} はまだ達成していません。</value>
+  </data>
+  <data name="MissionStatusClaimable" xml:space="preserve">
+    <value>受取可能</value>
+  </data>
+  <data name="MissionStatusClaimed" xml:space="preserve">
+    <value>受取済み</value>
+  </data>
+  <data name="MissionStatusInProgress" xml:space="preserve">
+    <value>進行中</value>
+  </data>
+  <data name="MissionUnknown" xml:space="preserve">
+    <value>{0} というミッションはありません。</value>
+  </data>
+  <data name="MissionsHeader" xml:space="preserve">
+    <value>今日のミッション（UTC の日付基準）</value>
+  </data>
   <data name="NicknameRejected" xml:space="preserve">
     <value>サーバーが {0} を拒否しました。</value>
   </data>
@@ -249,6 +285,21 @@
   </data>
   <data name="WindowTooSmall" xml:space="preserve">
     <value>コンソールウィンドウが {0}x{1} より小さいため、表示が折り返される場合があります。</value>
+  </data>
+  <data name="mission.clear_40.name" xml:space="preserve">
+    <value>40ライン消す</value>
+  </data>
+  <data name="mission.harddrop_30.name" xml:space="preserve">
+    <value>ハードドロップを30回きめる</value>
+  </data>
+  <data name="mission.play_3.name" xml:space="preserve">
+    <value>3回対戦する</value>
+  </data>
+  <data name="mission.send_20.name" xml:space="preserve">
+    <value>おじゃまを20ライン送る</value>
+  </data>
+  <data name="mission.win_1.name" xml:space="preserve">
+    <value>1回勝利する</value>
   </data>
   <data name="skin.classic.name" xml:space="preserve">
     <value>クラシック</value>

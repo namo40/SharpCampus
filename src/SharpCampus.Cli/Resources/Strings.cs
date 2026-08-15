@@ -24,6 +24,18 @@ internal static class Strings
     public static string LoginFailed => Get(nameof(LoginFailed));
     public static string MatchResumed => Get(nameof(MatchResumed));
     public static string Matched => Get(nameof(Matched));
+    public static string MissionAlreadyClaimed => Get(nameof(MissionAlreadyClaimed));
+    public static string MissionClaimed => Get(nameof(MissionClaimed));
+    public static string MissionColumnMission => Get(nameof(MissionColumnMission));
+    public static string MissionColumnProgress => Get(nameof(MissionColumnProgress));
+    public static string MissionColumnReward => Get(nameof(MissionColumnReward));
+    public static string MissionColumnStatus => Get(nameof(MissionColumnStatus));
+    public static string MissionNotCompleted => Get(nameof(MissionNotCompleted));
+    public static string MissionStatusClaimable => Get(nameof(MissionStatusClaimable));
+    public static string MissionStatusClaimed => Get(nameof(MissionStatusClaimed));
+    public static string MissionStatusInProgress => Get(nameof(MissionStatusInProgress));
+    public static string MissionUnknown => Get(nameof(MissionUnknown));
+    public static string MissionsHeader => Get(nameof(MissionsHeader));
     public static string NicknameRejected => Get(nameof(NicknameRejected));
     public static string NicknameRule => Get(nameof(NicknameRule));
     public static string NicknameTaken => Get(nameof(NicknameTaken));
@@ -81,6 +93,12 @@ internal static class Strings
     // Where only the id is at hand, the key is rebuilt the way master data spells it.
     public static string SkinName(SkinId skinId) =>
         _resources.GetString($"skin.{skinId.AsPrimitive().ToLowerInvariant()}.name") ?? skinId.AsPrimitive();
+
+    // Mission names are keyed the same way skins are: by the nameKey master data carries.
+    public static string MissionName(string nameKey) => _resources.GetString(nameKey) ?? nameKey;
+
+    public static string MissionName(MissionId missionId) =>
+        _resources.GetString($"mission.{missionId.AsPrimitive().ToLowerInvariant()}.name") ?? missionId.AsPrimitive();
 
     private static string Get(string name) => _resources.GetString(name)!;
 }

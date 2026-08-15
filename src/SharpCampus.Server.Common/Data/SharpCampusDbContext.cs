@@ -12,6 +12,8 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
 
     public DbSet<OwnedSkin> OwnedSkins => Set<OwnedSkin>();
 
+    public DbSet<MissionProgress> MissionProgress => Set<MissionProgress>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         // UnitGenerator emits these converters, but EF never finds them on its own: without this registration
@@ -21,6 +23,7 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
         configurationBuilder.Properties<Rating>().HaveConversion<Rating.RatingValueConverter>();
         configurationBuilder.Properties<MatchId>().HaveConversion<MatchId.MatchIdValueConverter>();
         configurationBuilder.Properties<SkinId>().HaveConversion<SkinId.SkinIdValueConverter>();
+        configurationBuilder.Properties<MissionId>().HaveConversion<MissionId.MissionIdValueConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -76,5 +79,20 @@ public sealed class SharpCampusDbContext(DbContextOptions<SharpCampusDbContext> 
         owned.Property(o => o.UserId).HasColumnName("user_id");
         owned.Property(o => o.SkinId).HasColumnName("skin_id");
         owned.Property(o => o.AcquiredAt).HasColumnName("acquired_at").ValueGeneratedOnAdd();
+
+        var mission = modelBuilder.Entity<MissionProgress>();
+
+        mission.ToTable("mission_progress");
+
+        // The day belongs in the key: progress is per account, per mission and per date, and yesterday's
+        // row stays where it is once the date moves on.
+        mission.HasKey(m => new { m.UserId, m.MissionDate, m.MissionId });
+
+        mission.Property(m => m.UserId).HasColumnName("user_id");
+        mission.Property(m => m.MissionDate).HasColumnName("mission_date");
+        mission.Property(m => m.MissionId).HasColumnName("mission_id");
+        mission.Property(m => m.Progress).HasColumnName("progress");
+        mission.Property(m => m.Claimed).HasColumnName("claimed").ValueGeneratedOnAdd();
+        mission.Property(m => m.UpdatedAt).HasColumnName("updated_at").ValueGeneratedOnAdd();
     }
 }

@@ -50,6 +50,10 @@ builder.Services.AddMessagePipe();
 builder.Services.AddScoped<IMatchSettlementService, MatchSettlementService>();
 builder.Services.AddSingleton<MatchSettlementHandler>();
 builder.Services.AddHostedService<MatchSettlementSubscription>();
+
+// The same publication reaches a second subscriber that knows nothing about the first.
+builder.Services.AddSingleton<MissionProgressHandler>();
+builder.Services.AddHostedService<MissionProgressSubscription>();
 builder.Services.AddMagicOnion(options =>
 {
     options.MessageSerializer = ContractSerialization.Provider;

@@ -49,6 +49,15 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
                 services.AddScoped(_ => shop);
             }));
 
+    // Missions materialize the profile the shop does and keep progress in a store of their own.
+    public WebApplicationFactory<Program> WithMissions(IProfileRepository profiles, IMissionRepository missions) =>
+        WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => profiles);
+                services.AddScoped(_ => missions);
+            }));
+
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.ConfigureTestServices(services =>
         {

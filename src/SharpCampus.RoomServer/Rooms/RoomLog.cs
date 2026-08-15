@@ -50,4 +50,7 @@ internal static partial class RoomLog
 
     [ZLoggerMessage(LogLevel.Error, "Match {matchId} was not settled: {reason}")]
     public static partial void MatchSettlementFailed(this ILogger logger, MatchId matchId, string reason);
+
+    [ZLoggerMessage(LogLevel.Error, "Match {matchId} did not reach the daily missions: {reason}")]
+    public static partial void MissionProgressFailed(this ILogger logger, MatchId matchId, string reason);
 }

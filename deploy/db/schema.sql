@@ -5,6 +5,7 @@
 DROP TABLE IF EXISTS profiles CASCADE;
 DROP TABLE IF EXISTS match_records CASCADE;
 DROP TABLE IF EXISTS owned_skins CASCADE;
+DROP TABLE IF EXISTS mission_progress CASCADE;
 
 -- No foreign key to auth.users: user_id carries the `sub` claim of the verified access token, which keeps
 -- the account provider (Supabase today) replaceable without touching the game schema.
@@ -55,4 +56,19 @@ CREATE TABLE owned_skins (
     skin_id     text        NOT NULL,
     acquired_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, skin_id)
+);
+
+-- Daily mission progress, one row per account, day and mission. The day being part of the key is what
+-- makes the midnight reset free: tomorrow is a different key, so nothing has to clear anything. A row
+-- only appears once there is progress to record, which is why a fresh day reads as no rows at all.
+-- No foreign key to a mission table either: which missions exist is master data, outside this database.
+-- Production note: a real service would prune rows past a retention window, since this table only grows.
+CREATE TABLE mission_progress (
+    user_id      uuid        NOT NULL,
+    mission_date date        NOT NULL,
+    mission_id   text        NOT NULL,
+    progress     integer     NOT NULL,
+    claimed      boolean     NOT NULL DEFAULT false,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, mission_date, mission_id)
 );

@@ -109,6 +109,8 @@ cli> nickname boardsweeper
 cli> skins
 cli> buy mono
 cli> equip mono
+cli> missions
+cli> claim win_1
 cli> duel
 cli> logout
 ```
@@ -125,6 +127,11 @@ are wearing. `buy` spends match winnings on one — the balance check, the coin 
 row settle in a single database transaction, so neither an overdraft nor a double purchase can slip
 through — and `equip` picks the theme your boards are drawn in from the next match on. The free theme
 is what every account starts with.
+
+`missions` lists the daily missions and how far today's matches have carried you towards each one — matches
+played, wins, lines cleared, garbage sent and hard drops. A day here is a UTC date, so every mission starts
+over at midnight UTC. `claim` takes the coins a finished mission pays; claiming the same mission a second
+time pays nothing extra, so a retry after a dropped connection costs you nothing.
 
 `duel` joins the matchmaking queue and polls until an opponent turns up. The ApiServer pairs the two
 accounts, asks the least loaded room server to stand up a room for them, and answers each client with

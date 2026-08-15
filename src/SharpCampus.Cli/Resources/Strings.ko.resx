@@ -100,6 +100,42 @@
   <data name="Matched" xml:space="preserve">
     <value>{1}의 방 {0}에 매칭되었습니다.</value>
   </data>
+  <data name="MissionAlreadyClaimed" xml:space="preserve">
+    <value>{0} 보상은 오늘 이미 받았습니다.</value>
+  </data>
+  <data name="MissionClaimed" xml:space="preserve">
+    <value>{0} 보상을 받았습니다.</value>
+  </data>
+  <data name="MissionColumnMission" xml:space="preserve">
+    <value>미션</value>
+  </data>
+  <data name="MissionColumnProgress" xml:space="preserve">
+    <value>진행</value>
+  </data>
+  <data name="MissionColumnReward" xml:space="preserve">
+    <value>보상</value>
+  </data>
+  <data name="MissionColumnStatus" xml:space="preserve">
+    <value>상태</value>
+  </data>
+  <data name="MissionNotCompleted" xml:space="preserve">
+    <value>{0}은(는) 아직 달성하지 못했습니다.</value>
+  </data>
+  <data name="MissionStatusClaimable" xml:space="preserve">
+    <value>수령 가능</value>
+  </data>
+  <data name="MissionStatusClaimed" xml:space="preserve">
+    <value>수령함</value>
+  </data>
+  <data name="MissionStatusInProgress" xml:space="preserve">
+    <value>진행 중</value>
+  </data>
+  <data name="MissionUnknown" xml:space="preserve">
+    <value>{0}(이)라는 미션은 없습니다.</value>
+  </data>
+  <data name="MissionsHeader" xml:space="preserve">
+    <value>오늘의 미션 (UTC 날짜 기준)</value>
+  </data>
   <data name="NicknameRejected" xml:space="preserve">
     <value>서버가 {0}을(를) 거부했습니다.</value>
   </data>
@@ -249,6 +285,21 @@
   </data>
   <data name="WindowTooSmall" xml:space="preserve">
     <value>콘솔 창이 {0}x{1}보다 작습니다. 화면이 줄바꿈될 수 있습니다.</value>
+  </data>
+  <data name="mission.clear_40.name" xml:space="preserve">
+    <value>라인 40줄 클리어</value>
+  </data>
+  <data name="mission.harddrop_30.name" xml:space="preserve">
+    <value>하드 드롭 30회</value>
+  </data>
+  <data name="mission.play_3.name" xml:space="preserve">
+    <value>3판 플레이</value>
+  </data>
+  <data name="mission.send_20.name" xml:space="preserve">
+    <value>가비지 20줄 보내기</value>
+  </data>
+  <data name="mission.win_1.name" xml:space="preserve">
+    <value>1승 달성</value>
   </data>
   <data name="skin.classic.name" xml:space="preserve">
     <value>클래식</value>

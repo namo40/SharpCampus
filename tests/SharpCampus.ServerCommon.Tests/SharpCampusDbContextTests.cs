@@ -117,6 +117,41 @@ public sealed class SharpCampusDbContextTests
         Assert.IsType<SkinId.SkinIdValueConverter>(FindConverter(owned, nameof(OwnedSkin.SkinId)));
     }
 
+    [Fact]
+    public void MissionProgress_MapsToTheColumnsOfTheSchemaScript()
+    {
+        var mission = FindEntityType(typeof(MissionProgress));
+        string[] expected = ["claimed", "mission_date", "mission_id", "progress", "updated_at", "user_id"];
+
+        Assert.Equal("mission_progress", mission.GetTableName());
+        Assert.Equal(expected, mission.GetProperties().Select(p => p.GetColumnName()).Order());
+    }
+
+    [Fact]
+    public void MissionProgress_IsKeyedByTheAccountTheDayAndTheMissionTogether()
+    {
+        var mission = FindEntityType(typeof(MissionProgress));
+
+        Assert.Equal(
+            [
+                nameof(MissionProgress.UserId),
+                nameof(MissionProgress.MissionDate),
+                nameof(MissionProgress.MissionId),
+            ],
+            mission.FindPrimaryKey()!.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void MissionProgressColumnsWithADatabaseDefault_AreLeftToTheDatabaseOnInsert()
+    {
+        var mission = FindEntityType(typeof(MissionProgress));
+
+        Assert.Equal(ValueGenerated.OnAdd, FindProperty(mission, nameof(MissionProgress.Claimed)).ValueGenerated);
+        Assert.Equal(ValueGenerated.OnAdd, FindProperty(mission, nameof(MissionProgress.UpdatedAt)).ValueGenerated);
+        Assert.Equal(ValueGenerated.Never, FindProperty(mission, nameof(MissionProgress.Progress)).ValueGenerated);
+        Assert.IsType<MissionId.MissionIdValueConverter>(FindConverter(mission, nameof(MissionProgress.MissionId)));
+    }
+
     private static IEntityType FindProfileType() => FindEntityType(typeof(Profile));
 
     private static IEntityType FindEntityType(Type type)

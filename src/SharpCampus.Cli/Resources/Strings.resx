@@ -100,6 +100,42 @@
   <data name="Matched" xml:space="preserve">
     <value>Matched into {0} on {1}.</value>
   </data>
+  <data name="MissionAlreadyClaimed" xml:space="preserve">
+    <value>{0} has already paid out today.</value>
+  </data>
+  <data name="MissionClaimed" xml:space="preserve">
+    <value>Claimed the reward for {0}.</value>
+  </data>
+  <data name="MissionColumnMission" xml:space="preserve">
+    <value>Mission</value>
+  </data>
+  <data name="MissionColumnProgress" xml:space="preserve">
+    <value>Progress</value>
+  </data>
+  <data name="MissionColumnReward" xml:space="preserve">
+    <value>Reward</value>
+  </data>
+  <data name="MissionColumnStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="MissionNotCompleted" xml:space="preserve">
+    <value>{0} is not finished yet.</value>
+  </data>
+  <data name="MissionStatusClaimable" xml:space="preserve">
+    <value>claimable</value>
+  </data>
+  <data name="MissionStatusClaimed" xml:space="preserve">
+    <value>claimed</value>
+  </data>
+  <data name="MissionStatusInProgress" xml:space="preserve">
+    <value>in progress</value>
+  </data>
+  <data name="MissionUnknown" xml:space="preserve">
+    <value>There is no mission called {0}.</value>
+  </data>
+  <data name="MissionsHeader" xml:space="preserve">
+    <value>Today's missions, by UTC date</value>
+  </data>
   <data name="NicknameRejected" xml:space="preserve">
     <value>The server rejected {0}.</value>
   </data>
@@ -249,6 +285,21 @@
   </data>
   <data name="WindowTooSmall" xml:space="preserve">
     <value>The console window is smaller than {0}x{1}. The frame may wrap.</value>
+  </data>
+  <data name="mission.clear_40.name" xml:space="preserve">
+    <value>Clear 40 lines</value>
+  </data>
+  <data name="mission.harddrop_30.name" xml:space="preserve">
+    <value>Hard drop 30 times</value>
+  </data>
+  <data name="mission.play_3.name" xml:space="preserve">
+    <value>Play 3 matches</value>
+  </data>
+  <data name="mission.send_20.name" xml:space="preserve">
+    <value>Send 20 garbage lines</value>
+  </data>
+  <data name="mission.win_1.name" xml:space="preserve">
+    <value>Win a match</value>
   </data>
   <data name="skin.classic.name" xml:space="preserve">
     <value>Classic</value>
