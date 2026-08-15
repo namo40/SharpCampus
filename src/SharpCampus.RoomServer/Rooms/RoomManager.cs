@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Cysharp.Threading;
+using MessagePipe;
 using Microsoft.Extensions.Options;
 using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.MasterData;
@@ -14,6 +15,7 @@ public sealed class RoomManager(
     DuelRules rules,
     IActiveRoomStore activeRooms,
     IOptions<RoomServerOptions> options,
+    IAsyncPublisher<MatchFinishedEvent> matchFinished,
     ILogger<RoomManager> logger)
 {
     private readonly ConcurrentDictionary<RoomId, DuelRoom> _rooms = new();
@@ -39,7 +41,7 @@ public sealed class RoomManager(
                 return CreateRoomOutcome.AtCapacity;
             }
 
-            var room = new DuelRoom(roomId, players, rules, logger, Release);
+            var room = new DuelRoom(roomId, players, rules, logger, matchFinished, Release);
             _rooms[roomId] = room;
             _ = ObserveAsync(room, loopers.RegisterActionAsync((in _) => room.Tick()));
             return CreateRoomOutcome.Created;

@@ -44,5 +44,6 @@ public class RoomControlServiceTests
             RoomFixture.Rules(),
             RoomFixture.ActiveRooms(),
             RoomFixture.Options(capacity),
+            RoomFixture.Publisher(),
             NullLogger<RoomManager>.Instance);
 }

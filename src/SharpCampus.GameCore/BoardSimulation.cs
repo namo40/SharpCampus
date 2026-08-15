@@ -14,6 +14,8 @@ public sealed class BoardSimulation
     // generator seeded from the match seed.
     private const ulong GarbageStreamSalt = 0xD1B54A32D192ED03UL;
 
+    private const int QuadLines = 4;
+
     private readonly SimulationConfig _config;
     private readonly IPieceSource _pieces;
     private readonly int _playerIndex;
@@ -38,6 +40,11 @@ public sealed class BoardSimulation
     private int _elapsedTicks;
     private int _attackThisTick;
     private bool _lockedThisTick;
+    private int _linesCleared;
+    private int _quads;
+    private int _garbageSent;
+    private int _hardDrops;
+    private int _maxCombo;
 
     public BoardSimulation(SimulationConfig config, ulong seed, int playerIndex = 0)
         : this(config, new SevenBagPieceSource(seed), seed, playerIndex)
@@ -61,6 +68,8 @@ public sealed class BoardSimulation
     public BoardView View { get; }
 
     public bool ToppedOut { get; private set; }
+
+    public BoardStats Stats => new(_linesCleared, _quads, _garbageSent, _hardDrops, _maxCombo);
 
     public IReadOnlyList<TickEvent> LastTickEvents => _ownEvents;
 
@@ -225,6 +234,8 @@ public sealed class BoardSimulation
 
     private void HardDrop(List<TickEvent> events)
     {
+        _hardDrops++;
+
         while (TryMove(0, -1))
         {
         }
@@ -339,6 +350,13 @@ public sealed class BoardSimulation
         if (lines > 0)
         {
             _combo++;
+            _linesCleared += lines;
+            _maxCombo = Math.Max(_maxCombo, _combo);
+            if (lines == QuadLines)
+            {
+                _quads++;
+            }
+
             events.Add(TickEvent.LinesCleared(_playerIndex, lines, _combo));
 
             // Outgoing attack cancels the board's own queue before any of it reaches the opponent.
@@ -347,6 +365,7 @@ public sealed class BoardSimulation
             if (attack > 0)
             {
                 _attackThisTick += attack;
+                _garbageSent += attack;
                 events.Add(TickEvent.GarbageSent(_playerIndex, attack));
             }
         }

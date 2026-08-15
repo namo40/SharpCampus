@@ -34,5 +34,7 @@ public sealed class BoardView
 
     public bool ToppedOut => _board.ToppedOut;
 
+    public BoardStats Stats => _board.Stats;
+
     public CellKind GetCell(int x, int y) => _board.Cells[(y * BoardSimulation.Width) + x];
 }

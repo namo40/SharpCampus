@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="LogicLooper" />
+    <PackageReference Include="MessagePipe" />
   </ItemGroup>
 
   <ItemGroup>

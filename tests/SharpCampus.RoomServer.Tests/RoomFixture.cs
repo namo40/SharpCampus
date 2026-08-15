@@ -1,5 +1,6 @@
 using MagicOnion.Server;
 using MagicOnion.Server.Hubs;
+using MessagePipe;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using SharpCampus.GameCore;
@@ -116,6 +117,27 @@ internal sealed class FakeGroup(RecordingReceiver all) : IGroup<IDuelHubReceiver
     public ValueTask<int> CountAsync() => new(_connections.Count);
 }
 
+// A room publishes without waiting for anybody, so keeping what went past is the whole of it.
+internal sealed class RecordingPublisher : IAsyncPublisher<MatchFinishedEvent>
+{
+    public List<MatchFinishedEvent> Published { get; } = [];
+
+    public void Publish(MatchFinishedEvent message, CancellationToken cancellationToken = default)
+        => Published.Add(message);
+
+    public ValueTask PublishAsync(MatchFinishedEvent message, CancellationToken cancellationToken = default)
+    {
+        Publish(message, cancellationToken);
+        return default;
+    }
+
+    public ValueTask PublishAsync(
+        MatchFinishedEvent message,
+        AsyncPublishStrategy publishStrategy,
+        CancellationToken cancellationToken = default)
+        => PublishAsync(message, cancellationToken);
+}
+
 internal static class RoomFixture
 {
     public static readonly UserId FirstUser = new(Guid.Parse("11111111-1111-1111-1111-111111111111"));
@@ -165,6 +187,8 @@ internal static class RoomFixture
             rematchTimeoutTicks);
 
     public static IActiveRoomStore ActiveRooms() => Substitute.For<IActiveRoomStore>();
+
+    public static RecordingPublisher Publisher() => new();
 
     public static FakeGroup Group(RecordingReceiver receiver) => new(receiver);
 

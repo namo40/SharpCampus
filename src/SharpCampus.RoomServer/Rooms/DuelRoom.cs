@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using MagicOnion.Server.Hubs;
+using MessagePipe;
 using SharpCampus.GameCore;
 using SharpCampus.RoomServer.MasterData;
 using SharpCampus.Shared.Duel;
@@ -29,6 +30,7 @@ internal sealed class DuelRoom
     private readonly RoomPlayer[] _players;
     private readonly DuelRules _rules;
     private readonly ILogger _logger;
+    private readonly IAsyncPublisher<MatchFinishedEvent> _matchFinished;
     private readonly Action<DuelRoom>? _onClosed;
     private readonly Seat[] _seats = [new(), new()];
     private readonly List<GameInput>[] _queuedInputs = [[], []];
@@ -45,12 +47,14 @@ internal sealed class DuelRoom
         RoomPlayer[] players,
         DuelRules rules,
         ILogger logger,
+        IAsyncPublisher<MatchFinishedEvent> matchFinished,
         Action<DuelRoom>? onClosed = null)
     {
         RoomId = roomId;
         _players = players;
         _rules = rules;
         _logger = logger;
+        _matchFinished = matchFinished;
         _onClosed = onClosed;
         _tickInputs = [new GameInput[rules.InputPerTickMax], new GameInput[rules.InputPerTickMax]];
 
@@ -60,6 +64,9 @@ internal sealed class DuelRoom
     }
 
     public RoomId RoomId { get; }
+
+    // Identifies the game rather than the room: a rematch is settled on its own.
+    public MatchId MatchId { get; private set; } = MatchId.New();
 
     public RoomState State { get; private set; } = RoomState.WaitingForPlayers;
 
@@ -430,6 +437,17 @@ internal sealed class DuelRoom
         Everyone()?.OnMatchFinished(Result);
         _logger.RoomFinished(RoomId, _simulation.TickNumber, outcome, reason);
 
+        // Fire and forget: settlement talks to a database, and nothing a room does may make the loop
+        // thread wait. A room that never started never gets here, and has no match to settle.
+        _matchFinished.Publish(new MatchFinishedEvent(
+            MatchId,
+            RoomId,
+            outcome,
+            reason,
+            _simulation.TickNumber,
+            new MatchParticipant(_players[0].UserId, _simulation.Board1.Stats),
+            new MatchParticipant(_players[1].UserId, _simulation.Board2.Stats)));
+
         // Only a match both players saw through to the end is worth replaying, and only while both of
         // them are still there to answer.
         if (reason is MatchEndReason.TopOut or MatchEndReason.Forfeit
@@ -513,6 +531,7 @@ internal sealed class DuelRoom
 
         var seed = NewSeed();
         _simulation = new DuelSimulation(_rules.Simulation, seed);
+        MatchId = MatchId.New();
         _logger.RoomRematching(RoomId, seed);
 
         StartCountdown();

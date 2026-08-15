@@ -47,4 +47,7 @@ internal static partial class RoomLog
 
     [ZLoggerMessage(LogLevel.Information, "Registered {name} with {roomCount}/{capacity} rooms")]
     public static partial void RoomServerRegistered(this ILogger logger, string name, int roomCount, int capacity);
+
+    [ZLoggerMessage(LogLevel.Error, "Match {matchId} was not settled: {reason}")]
+    public static partial void MatchSettlementFailed(this ILogger logger, MatchId matchId, string reason);
 }

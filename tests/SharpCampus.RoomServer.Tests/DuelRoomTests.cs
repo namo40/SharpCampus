@@ -215,6 +215,7 @@ public class DuelRoomTests
             RoomFixture.Players(),
             RoomFixture.Rules(joinTimeoutTicks: 2),
             NullLogger.Instance,
+            RoomFixture.Publisher(),
             closing => released = closing);
 
         room.Tick();
@@ -435,15 +436,12 @@ public class DuelRoomTests
         Assert.Equal(RoomState.Closed, room.State);
     }
 
-    private static int LockCount(RecordingReceiver receiver) => receiver.Deltas
-        .SelectMany(delta => delta.Events)
-        .Count(duelEvent => duelEvent.Kind == TickEventKind.PieceLocked);
-
     [Fact]
-    public void FinishAfterBothPlayersVanished_StillClosesTheRoom()
+    public void FinishAfterBothPlayersVanished_StillClosesTheRoomAndSettles()
     {
+        var publisher = RoomFixture.Publisher();
         var group = RoomFixture.Group(new RecordingReceiver());
-        var room = SeatedRoom(group, RoomFixture.Rules()).TickToPlaying();
+        var room = SeatedRoom(group, RoomFixture.Rules(), publisher).TickToPlaying();
 
         // Both connections die and take the group with them before the room hears about either seat.
         group.Dispose();
@@ -451,6 +449,7 @@ public class DuelRoomTests
 
         Assert.False(room.Tick());
         Assert.Equal(RoomState.Closed, room.State);
+        Assert.Single(publisher.Published);
     }
 
     [Fact]
@@ -497,12 +496,99 @@ public class DuelRoomTests
         Assert.True(room.IsClosed);
     }
 
-    private static DuelRoom CreateRoom(DuelRules rules)
-        => new(_roomId, RoomFixture.Players(), rules, NullLogger.Instance);
-
-    private static DuelRoom SeatedRoom(FakeGroup group, DuelRules rules)
+    [Fact]
+    public void FinishedGame_IsPublishedOnceWithEverythingSettlementNeeds()
     {
-        var room = CreateRoom(rules);
+        var publisher = RoomFixture.Publisher();
+        var group = RoomFixture.Group(new RecordingReceiver());
+        var room = SeatedRoom(group, RoomFixture.Rules(), publisher).TickToPlaying();
+
+        // Gravity is frozen in the test rules, so a hard drop is the only thing that moves a board on.
+        HardDrop(room, 0);
+        room.Tick();
+        HardDrop(room, 0);
+        room.Tick();
+
+        Forfeit(room, 1);
+        room.Tick();
+
+        var published = Assert.Single(publisher.Published);
+        Assert.Equal(room.MatchId, published.MatchId);
+        Assert.Equal(_roomId, published.RoomId);
+        Assert.Equal(DuelOutcome.Player1Wins, published.Outcome);
+        Assert.Equal(MatchEndReason.Forfeit, published.Reason);
+        Assert.Equal(2, published.DurationTicks);
+
+        Assert.Equal(RoomFixture.FirstUser, published.Player1.UserId);
+        Assert.Equal(RoomFixture.SecondUser, published.Player2.UserId);
+        Assert.Equal(2, published.Player1.Stats.HardDrops);
+        Assert.Equal(0, published.Player2.Stats.HardDrops);
+    }
+
+    [Fact]
+    public void EachGameOfARematch_IsSettledUnderAMatchIdOfItsOwn()
+    {
+        var publisher = RoomFixture.Publisher();
+        var group = RoomFixture.Group(new RecordingReceiver());
+        var room = SeatedRoom(group, RoomFixture.Rules(rematchTimeoutTicks: 60), publisher).TickToPlaying();
+        Answers(group, first: true, second: true);
+
+        Forfeit(room, 0);
+        room.Tick();
+
+        room.TickToPlaying();
+        Forfeit(room, 0);
+        room.Tick();
+
+        Assert.Equal(2, publisher.Published.Count);
+        Assert.NotEqual(publisher.Published[0].MatchId, publisher.Published[1].MatchId);
+    }
+
+    [Fact]
+    public void AbandonedMatch_IsNotSettled()
+    {
+        var publisher = RoomFixture.Publisher();
+        var room = CreateRoom(RoomFixture.Rules(joinTimeoutTicks: 2), publisher);
+        room.Join(RoomFixture.Group(new RecordingReceiver()), RoomFixture.FirstUser, RoomFixture.Connections[0]);
+
+        Assert.False(room.Tick());
+
+        Assert.Empty(publisher.Published);
+    }
+
+    [Fact]
+    public void DrawnGame_IsSettledLikeAnyOther()
+    {
+        var publisher = RoomFixture.Publisher();
+        var room = SeatedRoom(RoomFixture.Group(new RecordingReceiver()), RoomFixture.Rules(graceTicks: 2), publisher)
+            .TickToPlaying();
+
+        Disconnect(room, 0);
+        Disconnect(room, 1);
+
+        room.Tick();
+        Assert.False(room.Tick());
+
+        var published = Assert.Single(publisher.Published);
+        Assert.Equal(DuelOutcome.Draw, published.Outcome);
+        Assert.Equal(MatchEndReason.Disconnect, published.Reason);
+    }
+
+    private static int LockCount(RecordingReceiver receiver) => receiver.Deltas
+        .SelectMany(delta => delta.Events)
+        .Count(duelEvent => duelEvent.Kind == TickEventKind.PieceLocked);
+
+    private static DuelRoom CreateRoom(DuelRules rules, RecordingPublisher? publisher = null)
+        => new(
+            _roomId,
+            RoomFixture.Players(),
+            rules,
+            NullLogger.Instance,
+            publisher ?? RoomFixture.Publisher());
+
+    private static DuelRoom SeatedRoom(FakeGroup group, DuelRules rules, RecordingPublisher? publisher = null)
+    {
+        var room = CreateRoom(rules, publisher);
         room.Join(group, RoomFixture.FirstUser, RoomFixture.Connections[0]);
         room.Join(group, RoomFixture.SecondUser, RoomFixture.Connections[1]);
         return room;
@@ -513,6 +599,9 @@ public class DuelRoomTests
 
     private static void Disconnect(DuelRoom room, int playerIndex)
         => room.TryPost(RoomCommand.Disconnect(playerIndex, RoomFixture.Connections[playerIndex]));
+
+    private static void HardDrop(DuelRoom room, int playerIndex)
+        => room.TryPost(RoomCommand.SendInputs(playerIndex, [GameInput.HardDrop]));
 
     // An answer left out is one the room never hears, which is what its own timeout is for.
     private static void Answers(FakeGroup group, bool? first, bool? second)

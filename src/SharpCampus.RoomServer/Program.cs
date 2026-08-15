@@ -9,6 +9,7 @@ using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Logging;
 using SharpCampus.Server.Common.MasterData;
 using SharpCampus.Server.Common.Services;
+using SharpCampus.Server.Common.Settlement;
 using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Serialization;
 
@@ -18,6 +19,10 @@ builder.Logging.AddSharpCampusLogging();
 builder.Services.AddServerOptions(builder.Configuration);
 builder.Services.AddSupabaseJwtAuthentication(builder.Configuration);
 builder.Services.AddRedis(builder.Configuration);
+
+// Settlement is written from here rather than handed to the ApiServer over an internal call.
+// Production note: a real service would think harder about which process owns writes to which table.
+builder.Services.AddDatabase(builder.Configuration);
 builder.Services.AddEntryTokens(builder.Configuration);
 builder.Services.AddMasterData(builder.Configuration);
 builder.Services.AddSingleton(provider => SimulationConfigFactory.Create(provider.GetRequiredService<MemoryDatabase>()));
@@ -39,6 +44,12 @@ builder.Services.AddSingleton<ILogicLooperPool>(provider => new LogicLooperPool(
     RoundRobinLogicLooperPoolBalancer.Instance));
 builder.Services.AddSingleton<RoomManager>();
 builder.Services.AddHostedService<RoomRegistryHeartbeat>();
+
+// The tick loop only decides who won; what a win is worth happens on the other side of this.
+builder.Services.AddMessagePipe();
+builder.Services.AddScoped<IMatchSettlementService, MatchSettlementService>();
+builder.Services.AddSingleton<MatchSettlementHandler>();
+builder.Services.AddHostedService<MatchSettlementSubscription>();
 builder.Services.AddMagicOnion(options =>
 {
     options.MessageSerializer = ContractSerialization.Provider;

@@ -138,6 +138,7 @@ public class RoomManagerTests
             RoomFixture.Rules(joinTimeoutTicks: joinTimeoutTicks),
             activeRooms ?? RoomFixture.ActiveRooms(),
             RoomFixture.Options(capacity),
+            RoomFixture.Publisher(),
             NullLogger<RoomManager>.Instance);
 
     // The piece order is the only thing a seed shows through, so it stands in for the seed itself.

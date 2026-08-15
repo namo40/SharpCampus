@@ -66,7 +66,13 @@ public class RoomRegistryHeartbeatTests
     }
 
     private static RoomManager CreateRooms(ILogicLooperPool pool, IOptions<RoomServerOptions> options)
-        => new(pool, RoomFixture.Rules(), RoomFixture.ActiveRooms(), options, NullLogger<RoomManager>.Instance);
+        => new(
+            pool,
+            RoomFixture.Rules(),
+            RoomFixture.ActiveRooms(),
+            options,
+            RoomFixture.Publisher(),
+            NullLogger<RoomManager>.Instance);
 
     private RoomRegistryHeartbeat CreateHeartbeat(RoomManager rooms, IOptions<RoomServerOptions> options)
         => new(_registry, rooms, options, NullLogger<RoomRegistryHeartbeat>.Instance);
