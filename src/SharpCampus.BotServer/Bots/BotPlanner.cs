@@ -1,5 +1,6 @@
 using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
+using ZLinq;
 
 namespace SharpCampus.BotServer.Bots;
 
@@ -25,20 +26,8 @@ internal static class BotPlanner
             return [];
         }
 
-        var best = candidates[0];
-        var bestScore = Score(best);
-
-        for (var i = 1; i < candidates.Count; i++)
-        {
-            var score = Score(candidates[i]);
-            if (score > bestScore)
-            {
-                best = candidates[i];
-                bestScore = score;
-            }
-        }
-
-        return Inputs(kind, best);
+        // Ties go to the first pose enumerated, the way the hand-rolled scan settled them.
+        return Inputs(kind, candidates.AsValueEnumerable().MaxBy(Score));
     }
 
     private static double Score(Placement placement)

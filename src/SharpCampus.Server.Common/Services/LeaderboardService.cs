@@ -8,6 +8,7 @@ using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Services;
+using ZLinq;
 
 namespace SharpCampus.Server.Common.Services;
 
@@ -16,6 +17,7 @@ public sealed class LeaderboardService(
     IUserContext userContext,
     IProfileRepository profiles,
     ILeaderboardStore leaderboard,
+    ILeaderboardCache cache,
     TimeProvider time)
     : ServiceBase<ILeaderboardService>, ILeaderboardService
 {
@@ -28,10 +30,21 @@ public sealed class LeaderboardService(
         var userId = userContext.UserId;
         var board = BoardOf(kind);
 
-        var top = await leaderboard.TopAsync(board, TopCount);
+        // The caller's own place is personal to the call and one cheap Redis read, so it is never served
+        // from the cached page beside it.
         var me = await leaderboard.FindAsync(board, userId);
 
-        HashSet<UserId> ids = [.. top.Select(row => row.UserId)];
+        if (await cache.GetTopAsync(board) is { } cached)
+        {
+            // The page already carries its names, leaving only the one beside the caller's own place.
+            return new LeaderboardView(
+                cached,
+                me is null ? null : ToEntry(me, await profiles.GetNicknamesAsync([me.UserId])));
+        }
+
+        var top = await leaderboard.TopAsync(board, TopCount);
+
+        HashSet<UserId> ids = [.. top.AsValueEnumerable().Select(row => row.UserId)];
         if (me is not null)
         {
             ids.Add(me.UserId);
@@ -44,6 +57,8 @@ public sealed class LeaderboardService(
         {
             entries[i] = ToEntry(top[i], nicknames);
         }
+
+        await cache.SetTopAsync(board, entries);
 
         return new LeaderboardView(entries, me is null ? null : ToEntry(me, nicknames));
     }

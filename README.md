@@ -110,6 +110,21 @@ tick duration, live rooms, queue depth and bots in play; `/healthz` answers for 
 does, and `/readyz` adds the Redis and Postgres an instance cannot serve without. The bot server has
 neither behind it, so it is ready as soon as it is alive.
 
+Put them under load with `tests/SharpCampus.LoadTest`, a [DFrame](https://github.com/Cysharp/DFrame)
+harness that hosts its controller and one worker in a single process:
+
+```bash
+dotnet run --project tests/SharpCampus.LoadTest
+```
+
+Open <http://localhost:7312> to choose a workload, how many virtual players run it and how many times,
+and to read what came back. `DuelMatchWorkload` plays whole matches between virtual players — one run
+of it is one match, played by the bot server's own player, so the queue calls, the entry token, the hub
+and the inputs are a console client's — and `LeaderboardQueryWorkload` reads the rating board. Both
+want the meta-game server, the match server, the Supabase stack and Redis up, and the bot server
+stopped, so that no fallback opponent joins what you are measuring. The accounts the harness plays as
+(`loadtest<N>@sharpcampus.dev`) are signed up on first use, as the bots' own are.
+
 Then drive them from the console client, which starts a REPL when you pass no arguments:
 
 ```bash

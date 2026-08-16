@@ -82,6 +82,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRoomRegistry, RedisRoomRegistry>();
         services.AddSingleton<IActiveRoomStore, RedisActiveRoomStore>();
         services.AddSingleton<ILeaderboardStore, RedisLeaderboardStore>();
+        services.AddSingleton<ILeaderboardCache, RedisLeaderboardCache>();
         return services;
     }
 

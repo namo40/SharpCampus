@@ -107,6 +107,20 @@ dotnet run --project src/SharpCampus.BotServer
 `/healthz`는 프로세스가 살아 있는 한 응답하고, `/readyz`는 여기에 인스턴스가 없으면 서비스할 수 없는 Redis와
 Postgres 상태까지 더합니다. 봇 서버는 그 둘에 의존하지 않으므로 살아 있으면 곧 준비된 상태입니다.
 
+서버에 부하를 걸 때는 `tests/SharpCampus.LoadTest`를 실행합니다. 컨트롤러와 워커를 한 프로세스에서 함께
+띄우는 [DFrame](https://github.com/Cysharp/DFrame) 기반 부하 테스트 도구입니다.
+
+```bash
+dotnet run --project tests/SharpCampus.LoadTest
+```
+
+<http://localhost:7312>을 열면 워크로드와 가상 플레이어 수, 실행 횟수를 고르고 결과를 확인할 수 있습니다.
+`DuelMatchWorkload`는 가상 플레이어끼리 실제 대전을 치릅니다. 한 번의 실행이 한 판이고, 봇 서버가 쓰는
+플레이어를 그대로 돌리므로 대기열 호출과 입장 토큰, 허브, 입력까지 전부 콘솔 클라이언트와 같은 경로를 지납니다.
+`LeaderboardQueryWorkload`는 레이팅 보드를 조회합니다. 둘 다 메타 게임 서버와 대전 서버, Supabase 스택,
+Redis가 떠 있어야 하고, 봇 서버는 꺼 두어야 합니다. 그래야 대체 상대로 들어온 봇이 측정에 섞이지 않습니다.
+이 도구가 쓰는 계정(`loadtest<N>@sharpcampus.dev`)은 봇 계정과 마찬가지로 처음 쓸 때 자동으로 가입됩니다.
+
 콘솔 클라이언트로 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
 
 ```bash

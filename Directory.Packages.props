@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
+    <PackageVersion Include="DFrame" Version="2.0.0" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.83.0" />
     <PackageVersion Include="LogicLooper" Version="1.6.0" />
     <PackageVersion Include="MagicOnion.Abstractions" Version="7.10.2" />
@@ -15,6 +16,7 @@
     <PackageVersion Include="MagicOnion.Server.JsonTranscoding" Version="7.10.2" />
     <PackageVersion Include="MagicOnion.Server.JsonTranscoding.Swagger" Version="7.10.2" />
     <PackageVersion Include="MasterMemory" Version="3.0.4" />
+    <PackageVersion Include="MemoryPack" Version="1.21.4" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="MessagePipe" Version="1.8.2" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
@@ -36,6 +38,7 @@
     <PackageVersion Include="UnitGenerator" Version="2.0.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="ZLinq" Version="1.5.6" />
     <PackageVersion Include="ZLogger" Version="2.5.10" />
     <PackageVersion Include="ZString" Version="2.6.0" />
   </ItemGroup>

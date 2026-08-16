@@ -1,12 +1,17 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- DFrame's controller is a Blazor Server app whose scoped CSS only reaches the output under the
+         web SDK, and on .NET 10 only behind this flag. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SharpCampus.Shared\SharpCampus.Shared.csproj" />
-    <ProjectReference Include="..\..\src\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
+    <PackageReference Include="DFrame" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpCampus.BotServer\SharpCampus.BotServer.csproj" />
   </ItemGroup>
 
 </Project>

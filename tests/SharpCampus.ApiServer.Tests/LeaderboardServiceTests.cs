@@ -24,6 +24,8 @@ public sealed class LeaderboardServiceTests(SupabaseTestFactory factory) : IClas
     private readonly IProfileRepository _profiles = Substitute.For<IProfileRepository>();
     private readonly ILeaderboardStore _leaderboard = Substitute.For<ILeaderboardStore>();
 
+    private readonly ILeaderboardCache _cache = MissingCache();
+
     public void Dispose() => _client.Dispose();
 
     [Fact]
@@ -129,6 +131,52 @@ public sealed class LeaderboardServiceTests(SupabaseTestFactory factory) : IClas
     }
 
     [Fact]
+    public async Task CachedPage_IsAnsweredWithoutTheBoardReadOrTheNamesOnIt()
+    {
+        Board([Place(_first, 0, 1500)]);
+        Cached(new LeaderboardEntry(1, "alice", 1500));
+
+        var view = await CreateClient(Guid.NewGuid()).GetLeaderboardAsync(LeaderboardKind.Rating);
+
+        Assert.Equal(["alice"], view.Top.Select(entry => entry.DisplayName));
+        await _leaderboard.DidNotReceive().TopAsync(Arg.Any<string>(), Arg.Any<int>());
+        await _profiles.DidNotReceive().GetNicknamesAsync(Arg.Any<IReadOnlyCollection<UserId>>());
+    }
+
+    [Fact]
+    public async Task OwnPlaceBesideACachedPage_IsReadLiveAndNamedByItself()
+    {
+        var userId = Guid.NewGuid();
+        var caller = new UserId(userId);
+        Board([], me: Place(caller, 41, 900));
+        Cached(new LeaderboardEntry(1, "alice", 1500));
+        Named((caller, "straggler"));
+
+        var view = await CreateClient(userId).GetLeaderboardAsync(LeaderboardKind.Rating);
+
+        Assert.Equal(42, view.Me?.Rank);
+        Assert.Equal("straggler", view.Me?.DisplayName);
+        await _leaderboard.Received(1).FindAsync(RatingBoard, caller);
+
+        // The cached page already carries the names on it, leaving the caller's own to look up.
+        await _profiles.Received(1).GetNicknamesAsync(Arg.Is<IReadOnlyCollection<UserId>>(ids => ids.Count == 1));
+    }
+
+    [Fact]
+    public async Task AssembledPage_IsLeftInTheCacheForTheNextCaller()
+    {
+        Board([Place(_first, 0, 1500)]);
+        Named((_first, "alice"));
+
+        await CreateClient(Guid.NewGuid()).GetLeaderboardAsync(LeaderboardKind.Rating);
+
+        await _cache.Received(1).SetTopAsync(
+            RatingBoard,
+            Arg.Is<LeaderboardEntry[]>(entries =>
+                entries.Length == 1 && entries[0].Rank == 1 && entries[0].DisplayName == "alice"));
+    }
+
+    [Fact]
     public async Task GetLeaderboardAsync_WithoutAToken_IsRejected()
     {
         var client = _client.Create<ILeaderboardService>(factory);
@@ -153,9 +201,21 @@ public sealed class LeaderboardServiceTests(SupabaseTestFactory factory) : IClas
             .GetNicknamesAsync(Arg.Any<IReadOnlyCollection<UserId>>())
             .Returns(profiles.ToDictionary(profile => profile.UserId, profile => profile.Nickname));
 
+    // An unconfigured substitute answers a page-shaped call with an empty page, which the service would
+    // read as a board nobody has reached; a test that says nothing about the cache means a miss.
+    private static ILeaderboardCache MissingCache()
+    {
+        var cache = Substitute.For<ILeaderboardCache>();
+        cache.GetTopAsync(Arg.Any<string>()).Returns((LeaderboardEntry[]?)null);
+
+        return cache;
+    }
+
+    private void Cached(params LeaderboardEntry[] top) => _cache.GetTopAsync(Arg.Any<string>()).Returns(top);
+
     private ILeaderboardService CreateClient(Guid userId) =>
         _client.Create<ILeaderboardService>(
-            factory.WithLeaderboards(_profiles, _leaderboard, new FixedTimeProvider(_clock)),
+            factory.WithLeaderboards(_profiles, _leaderboard, _cache, new FixedTimeProvider(_clock)),
             factory.CreateToken(userId, "player@example.com"));
 
     // A clock the test pins, so which day's board a call asks for is the test's choice and not the machine's.

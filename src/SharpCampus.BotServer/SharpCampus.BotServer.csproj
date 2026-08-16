@@ -2,12 +2,14 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SharpCampus.BotServer.Tests" />
+    <InternalsVisibleTo Include="SharpCampus.LoadTest" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Grpc.Net.Client" />
     <PackageReference Include="MagicOnion.Client" />
     <PackageReference Include="R3" />
+    <PackageReference Include="ZLinq" />
   </ItemGroup>
 
   <ItemGroup>

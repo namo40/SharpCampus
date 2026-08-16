@@ -9,6 +9,7 @@ using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Services;
 using SharpCampus.Shared.Values;
+using ZLinq;
 
 namespace SharpCampus.Server.Common.Services;
 
@@ -34,7 +35,7 @@ public sealed class MissionService(
             var mission = catalog[i];
 
             // A mission nothing has been done towards has no row of its own, which reads as a fresh zero.
-            var row = progress.FirstOrDefault(r => r.MissionId == mission.MissionId);
+            var row = progress.AsValueEnumerable().FirstOrDefault(r => r.MissionId == mission.MissionId);
             items[i] = new MissionItem(mission, row?.Progress ?? 0, row?.Claimed ?? false);
         }
 

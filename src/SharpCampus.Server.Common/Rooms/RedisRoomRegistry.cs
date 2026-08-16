@@ -1,4 +1,5 @@
 using StackExchange.Redis;
+using ZLinq;
 
 namespace SharpCampus.Server.Common.Rooms;
 
@@ -66,7 +67,7 @@ public sealed class RedisRoomRegistry(IConnectionMultiplexer redis) : IRoomRegis
 
     private static RoomServerEntry ToEntry(string name, HashEntry[] fields)
     {
-        var values = fields.ToDictionary(field => field.Name.ToString(), field => field.Value);
+        var values = fields.AsValueEnumerable().ToDictionary(field => field.Name.ToString(), field => field.Value);
 
         return new RoomServerEntry(
             name,

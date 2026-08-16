@@ -59,17 +59,19 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
                 services.AddScoped(_ => missions);
             }));
 
-    // The places come from Redis and the names beside them from the profile store, and the clock decides
-    // which day's board a call even asks for, so all three are the test's.
+    // The places come from Redis and the names beside them from the profile store, the cache decides
+    // whether either is read at all, and the clock decides which day's board a call even asks for.
     public WebApplicationFactory<Program> WithLeaderboards(
         IProfileRepository profiles,
         ILeaderboardStore leaderboard,
+        ILeaderboardCache cache,
         TimeProvider time) =>
         WithWebHostBuilder(builder =>
             builder.ConfigureTestServices(services =>
             {
                 services.AddScoped(_ => profiles);
                 services.AddSingleton(leaderboard);
+                services.AddSingleton(cache);
                 services.AddSingleton(time);
             }));
 
