@@ -14,6 +14,7 @@ using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Server.Common.Matchmaking;
+using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using StackExchange.Redis;
 
@@ -64,11 +65,12 @@ public sealed class RoomServerTestFactory : WebApplicationFactory<Program>
                 options.TokenValidationParameters.ValidIssuer = Issuer;
             });
 
-            // The registry heartbeat is the only thing here that talks to Redis, and rooms are created
-            // through the control service rather than by being discovered.
+            // The registry heartbeat is the only hosted service here that talks to Redis, and what a room
+            // itself writes there is doubled below.
             services.RemoveAll<IHostedService>();
             services.AddSingleton(Substitute.For<IConnectionMultiplexer>());
             services.AddSingleton(Substitute.For<IActiveRoomStore>());
+            services.AddSingleton(Substitute.For<IRoomLocationStore>());
         });
 
     protected override void Dispose(bool disposing)

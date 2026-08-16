@@ -24,11 +24,35 @@ public sealed class SupabaseOptionsTests
         Assert.Equal("http://127.0.0.1:54321/auth/v1", Resolve(url).Authority);
     }
 
-    private static SupabaseOptions Resolve(string url)
+    [Fact]
+    public void IssuerOfItsOwn_IsWhereTheAuthorityIs()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Supabase:Url"] = url })
-            .Build();
+        var options = Resolve("http://127.0.0.1:54321");
+
+        Assert.Equal(options.Authority, options.Issuer);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:54321")]
+    [InlineData("http://127.0.0.1:54321/")]
+    public void ConfiguredIssuerUrl_MovesTheIssuerAndLeavesTheAuthorityWhereItWas(string issuerUrl)
+    {
+        // What a container reaches GoTrue at and what GoTrue writes into `iss` are two different addresses.
+        var options = Resolve("http://host.docker.internal:54321", issuerUrl);
+
+        Assert.Equal("http://127.0.0.1:54321/auth/v1", options.Issuer);
+        Assert.Equal("http://host.docker.internal:54321/auth/v1", options.Authority);
+    }
+
+    private static SupabaseOptions Resolve(string url, string? issuerUrl = null)
+    {
+        var settings = new Dictionary<string, string?> { ["Supabase:Url"] = url };
+        if (issuerUrl is not null)
+        {
+            settings["Supabase:IssuerUrl"] = issuerUrl;
+        }
+
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
         var services = new ServiceCollection();
         services.AddSupabaseJwtAuthentication(configuration);

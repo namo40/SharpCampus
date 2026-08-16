@@ -185,6 +185,47 @@ ApiServer がボットサーバーに相手を頼みます。ボットは自分�
 
 使い終わったら `supabase stop` でスタックを停止し、`docker rm -f sharpcampus-redis` で Redis コンテナを片付けます。
 
+## Docker でスタック全体を動かす
+
+クイックスタートがソースツリーからサーバーを直接動かすものだったのに対し、こちらは実際にデプロイされる形そのままです。
+一つの Compose ファイルが、メタゲームサーバーと対戦サーバー 2 台（`room-1` と `room-2`）、ボットサーバーをコンテナ
+イメージとしてビルドし、その手前に Envoy の入口を置き、このスタック専用の Redis まで一緒に立ち上げます。Supabase
+だけは引き続き開発者自身のスタックなので、上と同じ手順で `supabase start` を動かし、スキーマも適用しておく必要が
+あります。
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build -d
+docker compose -f deploy/docker/docker-compose.yml down
+```
+
+最初のビルドではサーバーとマスターデータのデータベースをイメージの中でコンパイルするため、数分かかります。
+
+クライアントは 5000 番ポートの入口だけを通してすべてに届きます。実行する前に、`SHARPCAMPUS_SERVER` 環境変数で
+その宛先を指定します。
+
+```bash
+SHARPCAMPUS_SERVER=http://localhost:5000 dotnet run --project src/SharpCampus.Cli -- status
+```
+
+```powershell
+$env:SHARPCAMPUS_SERVER = 'http://localhost:5000'; dotnet run --project src/SharpCampus.Cli -- status
+```
+
+`room-id` ヘッダーを持たない gRPC 呼び出しはメタゲームサーバーへ向かいます。対戦の接続はこのヘッダーを持っており、
+Envoy はそのルームの持ち主を（メタゲームサーバーが Redis を読んで応答する内部エンドポイントに）問い合わせたうえで、
+そのルームを持つ対戦サーバーのインスタンスへストリームを流します。対戦サーバーはホスト側にポートを一つも公開して
+おらず、`status` でルームサーバーが到達不能と表示されるのは、まさにそのためです。待ち行列も対戦もミッションも
+ショップもランキングも、残りはすべて 5000 番ポートだけで動きます。
+
+計測は別のプロファイルに分けてあります。
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
+```
+
+こうすると、4 つのサーバーの計測エンドポイントをすべて収集する Prometheus が一緒に起動します。宛先は
+<http://localhost:19090> です。よく使われる 9090 は、Windows が予約しているポート範囲に入ってしまうためです。
+
 ## ライセンス
 
 MIT ライセンスです。[LICENSE](LICENSE) を参照してください。

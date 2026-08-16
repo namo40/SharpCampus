@@ -12,7 +12,6 @@ namespace SharpCampus.Cli.Commands;
 [RegisterCommands]
 internal sealed class RankCommands
 {
-    private const string ApiServerAddress = "http://localhost:5001";
     private const string ApiServerLabel = "ApiServer";
     private const string DailyBoard = "daily";
 
@@ -33,7 +32,7 @@ internal sealed class RankCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = MagicOnionClient.Create<ILeaderboardService>(channel)
             .WithHeaders(new Metadata { { "authorization", $"Bearer {session.AccessToken}" } });
 
@@ -47,7 +46,7 @@ internal sealed class RankCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 

@@ -31,7 +31,8 @@ public static class ServiceCollectionExtensions
         var section = configuration.GetSection(SupabaseOptions.SectionName);
         services.Configure<SupabaseOptions>(section);
 
-        var authority = (section.Get<SupabaseOptions>() ?? new SupabaseOptions()).Authority;
+        var supabase = section.Get<SupabaseOptions>() ?? new SupabaseOptions();
+        var authority = supabase.Authority;
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -44,8 +45,15 @@ public static class ServiceCollectionExtensions
                 // Without this, `sub` and `email` arrive renamed to their WS-Federation URIs.
                 options.MapInboundClaims = false;
 
-                options.TokenValidationParameters.ValidIssuer = authority;
+                // A containerized server reaches GoTrue at an address of its own, which is not the one
+                // GoTrue stamps into the tokens it issues. The defaults keep the two the same.
+                options.TokenValidationParameters.ValidIssuer = supabase.Issuer;
                 options.TokenValidationParameters.ValidAudience = SupabaseAudience;
+
+                if (supabase.IssuerUrl.Length > 0)
+                {
+                    options.BackchannelHttpHandler = new GoTrueBackchannelHandler(supabase, new HttpClientHandler());
+                }
             });
 
         services.AddAuthorization();
@@ -80,6 +88,7 @@ public static class ServiceCollectionExtensions
         // publish the registry take this on construction, so an unreachable Redis stops startup.
         services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
         services.AddSingleton<IRoomRegistry, RedisRoomRegistry>();
+        services.AddSingleton<IRoomLocationStore, RedisRoomLocationStore>();
         services.AddSingleton<IActiveRoomStore, RedisActiveRoomStore>();
         services.AddSingleton<ILeaderboardStore, RedisLeaderboardStore>();
         services.AddSingleton<ILeaderboardCache, RedisLeaderboardCache>();

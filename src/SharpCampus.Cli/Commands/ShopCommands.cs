@@ -15,7 +15,6 @@ namespace SharpCampus.Cli.Commands;
 [RegisterCommands]
 internal sealed class ShopCommands
 {
-    private const string ApiServerAddress = "http://localhost:5001";
     private const string ApiServerLabel = "ApiServer";
 
     /// <summary>Lists every skin with its price and whether you own it.</summary>
@@ -28,7 +27,7 @@ internal sealed class ShopCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = Create(channel, session);
 
         try
@@ -61,7 +60,7 @@ internal sealed class ShopCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 
@@ -76,7 +75,7 @@ internal sealed class ShopCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = Create(channel, session);
         var skin = Normalize(skinId);
 
@@ -104,7 +103,7 @@ internal sealed class ShopCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 
@@ -119,7 +118,7 @@ internal sealed class ShopCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = Create(channel, session);
         var skin = Normalize(skinId);
 
@@ -144,7 +143,7 @@ internal sealed class ShopCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 

@@ -25,14 +25,14 @@ public sealed class RoomMetricsTests
     }
 
     [Fact]
-    public void EveryTickOfARegisteredRoom_IsMeasured()
+    public async Task EveryTickOfARegisteredRoom_IsMeasured()
     {
         using var pool = new ManualLogicLooperPool(20);
         var meters = RoomFixture.Meters();
         var metrics = new RoomMetrics(meters);
         using var collector = new MetricCollector<double>(meters, RoomMetrics.MeterName, RoomMetrics.TickDurationName);
 
-        CreateManager(pool, metrics).Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
+        await CreateManager(pool, metrics).CreateAsync(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
         pool.Tick(2);
 
         Assert.Equal(2, collector.GetMeasurementSnapshot().Count);
@@ -54,7 +54,7 @@ public sealed class RoomMetricsTests
     }
 
     [Fact]
-    public void RoomsGauge_ReadsWhoeverKeepsTheRooms()
+    public async Task RoomsGauge_ReadsWhoeverKeepsTheRooms()
     {
         using var pool = new ManualLogicLooperPool(20);
         var meters = RoomFixture.Meters();
@@ -63,7 +63,7 @@ public sealed class RoomMetricsTests
         using var collector = new MetricCollector<int>(meters, RoomMetrics.MeterName, RoomMetrics.ActiveRoomsName);
 
         metrics.TrackRooms(() => manager.RoomCount);
-        manager.Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
+        await manager.CreateAsync(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
         collector.RecordObservableInstruments();
 
         Assert.Equal(1, collector.LastMeasurement?.Value);
@@ -74,6 +74,7 @@ public sealed class RoomMetricsTests
         RoomFixture.Rules(),
         RoomFixture.MasterData(),
         RoomFixture.ActiveRooms(),
+        RoomFixture.Locations(),
         RoomFixture.Options(),
         RoomFixture.Publisher(),
         metrics,

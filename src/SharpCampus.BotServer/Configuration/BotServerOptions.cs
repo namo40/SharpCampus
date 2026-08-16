@@ -24,6 +24,14 @@ public sealed class BotServerOptions
 
     public string Password { get; set; } = "sharpcampus-bot";
 
+    // A ticket names the entry point as outside clients reach it, which is not an address that exists
+    // inside the cluster. Set, this replaces the ticket's endpoint for the duel connection; the room-id
+    // header still picks the room behind it. Empty means the ticket is followed as written.
+    public string RoomEndpointOverride { get; set; } = "";
+
+    public string RoomEndpoint(string ticketEndpoint)
+        => RoomEndpointOverride.Length > 0 ? RoomEndpointOverride : ticketEndpoint;
+
     // Must stay below the ApiServer's SummonAfterSeconds: a bot nobody turned up for has to leave the
     // queue before it becomes the lone waiting account and draws a bot of its own. The two settings
     // live in different processes, so nothing at startup can check this for us.

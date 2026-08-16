@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using SharpCampus.Server.Common.Data;
 using SharpCampus.Server.Common.Leaderboards;
+using SharpCampus.Server.Common.Rooms;
 using StackExchange.Redis;
 
 namespace SharpCampus.ApiServer.Tests;
@@ -74,6 +75,11 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
                 services.AddSingleton(cache);
                 services.AddSingleton(time);
             }));
+
+    // The resolver route reads nothing else, so the store standing in for Redis is the whole of its input.
+    public WebApplicationFactory<Program> WithRoomLocations(IRoomLocationStore locations) =>
+        WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services => services.AddSingleton(locations)));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.ConfigureTestServices(services =>

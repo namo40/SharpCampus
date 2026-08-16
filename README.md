@@ -192,6 +192,49 @@ which is the whole of the daily reset.
 Stop the stack with `supabase stop` and the Redis container with `docker rm -f sharpcampus-redis` when
 you are done.
 
+## Full stack in Docker
+
+The Quick start runs the servers out of the source tree; this is the shape they deploy in. A single
+compose file builds the meta-game server, two match server instances (`room-1` and `room-2`) and the
+bot server into container images, puts an Envoy entry point in front of them and brings up a Redis of
+the stack's own. Supabase stays your own stack: `supabase start` has to be running with the schema
+applied, by the same commands as above.
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build -d
+docker compose -f deploy/docker/docker-compose.yml down
+```
+
+The first build compiles the servers and the master data database into the images, so it takes a few
+minutes.
+
+The client reaches everything through the entry point on port 5000, which the `SHARPCAMPUS_SERVER`
+environment variable points it at:
+
+```bash
+SHARPCAMPUS_SERVER=http://localhost:5000 dotnet run --project src/SharpCampus.Cli -- status
+```
+
+```powershell
+$env:SHARPCAMPUS_SERVER = 'http://localhost:5000'; dotnet run --project src/SharpCampus.Cli -- status
+```
+
+A gRPC call that carries no `room-id` header goes to the meta-game server. A duel connection carries
+one, and Envoy looks that room up — through an internal endpoint the meta-game server answers off
+Redis — to route the stream to the match server instance that owns it. The match servers publish no
+port to the host at all, which is precisely why `status` reports the room server as unreachable;
+everything else — queueing, duels, missions, the shop and the rankings — works through port 5000
+alone.
+
+Metrics are a profile of their own:
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
+```
+
+That adds a Prometheus scraping all four servers' metric endpoints, published on
+<http://localhost:19090> — the customary 9090 falls inside a port range Windows reserves.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

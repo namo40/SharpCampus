@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using SharpCampus.ApiServer.Matchmaking;
 using SharpCampus.ApiServer.Observability;
+using SharpCampus.ApiServer.Rooms;
 using SharpCampus.Server.Common;
 using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Logging;
@@ -69,6 +70,7 @@ app.MapMagicOnionService([
 ]);
 
 app.MapSharpCampusObservability();
+app.MapRoomLocation();
 
 // Resolved here rather than by the first caller that needs it: a gauge exists only once its owner does,
 // and an idle server is exactly when a zero on /metrics is worth reading.

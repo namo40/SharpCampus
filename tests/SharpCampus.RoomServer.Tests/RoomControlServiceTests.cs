@@ -44,6 +44,7 @@ public class RoomControlServiceTests
             RoomFixture.Rules(),
             RoomFixture.MasterData(),
             RoomFixture.ActiveRooms(),
+            RoomFixture.Locations(),
             RoomFixture.Options(capacity),
             RoomFixture.Publisher(),
             RoomFixture.Metrics(),

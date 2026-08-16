@@ -11,6 +11,7 @@ using SharpCampus.RoomServer.MasterData;
 using SharpCampus.RoomServer.Observability;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Server.Common.Matchmaking;
+using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Identity;
 using SharpCampus.Shared.Internal.Rooms;
@@ -203,6 +204,8 @@ internal static class RoomFixture
             rematchTimeoutTicks);
 
     public static IActiveRoomStore ActiveRooms() => Substitute.For<IActiveRoomStore>();
+
+    public static IRoomLocationStore Locations() => Substitute.For<IRoomLocationStore>();
 
     // A meter factory of its own per call, so what one test measures never reaches another's collector.
     public static IMeterFactory Meters() =>

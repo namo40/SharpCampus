@@ -1,0 +1,10 @@
+scrape_configs:
+  - job_name: sharpcampus
+    scrape_interval: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api:5011
+          - room-1:5012
+          - room-2:5012
+          - bot:5013

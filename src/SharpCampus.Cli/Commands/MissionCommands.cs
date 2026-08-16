@@ -13,7 +13,6 @@ namespace SharpCampus.Cli.Commands;
 [RegisterCommands]
 internal sealed class MissionCommands
 {
-    private const string ApiServerAddress = "http://localhost:5001";
     private const string ApiServerLabel = "ApiServer";
 
     /// <summary>Lists today's missions with what you have done towards them.</summary>
@@ -26,7 +25,7 @@ internal sealed class MissionCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = Create(channel, session);
 
         try
@@ -58,7 +57,7 @@ internal sealed class MissionCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 
@@ -73,7 +72,7 @@ internal sealed class MissionCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = Create(channel, session);
         var mission = Normalize(missionId);
 
@@ -101,7 +100,7 @@ internal sealed class MissionCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 

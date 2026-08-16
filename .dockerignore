@@ -1,0 +1,8 @@
+# Hidden entries are local working state, not build input. The analyzer configuration is the exception.
+.*
+!.editorconfig
+
+**/bin
+**/obj
+deploy
+website

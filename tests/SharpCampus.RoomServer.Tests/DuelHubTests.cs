@@ -38,7 +38,7 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task MatchedPair_MeetsInTheRoomAndBothSeeTheForfeit()
     {
-        var roomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
 
         var first = new RecordingReceiver();
         var second = new RecordingReceiver();
@@ -82,7 +82,7 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task RematchBothAccept_RunsASecondGameInTheSameRoom()
     {
-        var roomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
 
         var first = new RecordingReceiver { RematchReply = Task.FromResult(true) };
         var second = new RecordingReceiver { RematchReply = Task.FromResult(true) };
@@ -113,7 +113,7 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task Snapshot_ReturnsBothBoardsToAWaitingPlayer()
     {
-        var roomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
 
         var hub = await ConnectAsync(new RecordingReceiver(), _firstUser, TestContext.Current.CancellationToken);
 
@@ -149,7 +149,7 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task ForgedEntryToken_IsRefused()
     {
-        var roomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
         var token = _factory.EntryTokens.Issue(new UserId(_firstUser), roomId);
 
         // Flip the last character of the signature, leaving the payload the room would accept.
@@ -161,8 +161,8 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task EntryTokenForAnotherRoom_IsRefused()
     {
-        var roomId = CreateRoom();
-        var otherRoomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
+        var otherRoomId = await CreateRoomAsync();
 
         var token = _factory.EntryTokens.Issue(new UserId(_firstUser), otherRoomId);
 
@@ -172,7 +172,7 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task EntryTokenBelongingToAnotherAccount_IsRefused()
     {
-        var roomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
         var token = _factory.EntryTokens.Issue(new UserId(_secondUser), roomId);
 
         // The token itself is valid, but it is not the account this connection signed in as.
@@ -191,7 +191,7 @@ public sealed class DuelHubTests : IDisposable
     [Fact]
     public async Task AccountTheRoomIsNotWaitingFor_IsRefused()
     {
-        var roomId = CreateRoom();
+        var roomId = await CreateRoomAsync();
         var stranger = Guid.NewGuid();
         var token = _factory.EntryTokens.Issue(new UserId(stranger), roomId);
 
@@ -201,11 +201,11 @@ public sealed class DuelHubTests : IDisposable
     // Stands in for the ApiServer's room control call, which RoomControlServiceOverGrpcTests covers over
     // the wire. Reaching the manager directly keeps a unary request off the connections these tests
     // stream over, which the test server does not survive.
-    private RoomId CreateRoom()
+    private async Task<RoomId> CreateRoomAsync()
     {
         var roomId = new RoomId(Ulid.NewUlid());
 
-        var outcome = _factory.Rooms.Create(roomId, [
+        var outcome = await _factory.Rooms.CreateAsync(roomId, [
             new RoomPlayer(new UserId(_firstUser), "alpha", RoomFixture.PaidSkin),
             new RoomPlayer(new UserId(_secondUser), "beta", RoomFixture.FreeSkin),
         ]);

@@ -180,6 +180,46 @@ ApiServer가 봇 서버에 상대를 요청합니다. 봇은 자기 계정으로
 
 다 사용했으면 `supabase stop`으로 스택을 내리고, `docker rm -f sharpcampus-redis`로 Redis 컨테이너를 정리합니다.
 
+## Docker로 전체 스택 띄우기
+
+빠르게 시작하기가 소스 트리에서 서버를 직접 실행하는 방식이었다면, 이번에는 실제로 배포되는 형태 그대로 띄웁니다.
+컴포즈 파일 하나가 메타 게임 서버와 대전 서버 두 대(`room-1`, `room-2`), 봇 서버를 컨테이너 이미지로 빌드하고,
+그 앞에 Envoy 진입점을 세우고, 이 스택 전용 Redis까지 함께 올립니다. Supabase만은 여전히 개발자 본인의 스택이라서,
+위와 같은 명령으로 `supabase start`를 실행해 두고 스키마도 적용해 둔 상태여야 합니다.
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build -d
+docker compose -f deploy/docker/docker-compose.yml down
+```
+
+첫 빌드는 서버와 마스터 데이터 데이터베이스를 이미지 안에서 컴파일하므로 몇 분 걸립니다.
+
+클라이언트는 5000번 포트의 진입점 하나로 모든 서버에 닿습니다. 실행하기 전에 `SHARPCAMPUS_SERVER` 환경 변수로
+그 주소를 지정합니다.
+
+```bash
+SHARPCAMPUS_SERVER=http://localhost:5000 dotnet run --project src/SharpCampus.Cli -- status
+```
+
+```powershell
+$env:SHARPCAMPUS_SERVER = 'http://localhost:5000'; dotnet run --project src/SharpCampus.Cli -- status
+```
+
+`room-id` 헤더가 없는 gRPC 호출은 메타 게임 서버로 갑니다. 대전 접속은 이 헤더를 달고 오는데, Envoy는 헤더에 적힌
+방이 어느 서버 것인지를 내부 엔드포인트(메타 게임 서버가 Redis를 읽어 응답합니다)에 물어본 뒤, 그 방을 가진 대전
+서버 인스턴스로 스트림을 넘깁니다. 대전 서버는 호스트 쪽으로 포트를 하나도 열지 않으며, `status`에서 룸 서버가
+연결 불가로 나오는 것도 바로 그 때문입니다. 대기열, 대전, 미션, 상점, 순위표까지 나머지는 전부 5000번 포트 하나로
+동작합니다.
+
+지표 수집은 별도 프로파일로 분리해 두었습니다.
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
+```
+
+이렇게 하면 서버 네 대의 지표 엔드포인트를 모두 긁어 가는 Prometheus가 함께 뜹니다. 주소는
+<http://localhost:19090>입니다. 흔히 쓰는 9090은 Windows가 예약해 둔 포트 범위 안에 들어가기 때문입니다.
+
 ## 라이선스
 
 MIT 라이선스를 따릅니다. [LICENSE](LICENSE)를 참고하세요.

@@ -28,7 +28,7 @@ public class RoomRegistryHeartbeatTests
         using var pool = new ManualLogicLooperPool(20);
         var options = RoomFixture.Options(capacity: 42);
         var rooms = CreateRooms(pool, options);
-        rooms.Create(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
+        await rooms.CreateAsync(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
 
         var cancellationToken = TestContext.Current.CancellationToken;
         var heartbeat = CreateHeartbeat(rooms, options);
@@ -124,6 +124,7 @@ public class RoomRegistryHeartbeatTests
             RoomFixture.Rules(),
             RoomFixture.MasterData(),
             RoomFixture.ActiveRooms(),
+            RoomFixture.Locations(),
             options,
             RoomFixture.Publisher(),
             RoomFixture.Metrics(),

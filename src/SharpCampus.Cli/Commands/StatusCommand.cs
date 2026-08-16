@@ -13,7 +13,10 @@ internal sealed class StatusCommand
 {
     private static readonly (string Label, string Address)[] _servers =
     [
-        ("ApiServer", "http://localhost:5001"),
+        ("ApiServer", ClientEndpoints.ApiServer),
+
+        // A development convenience: a room server sits behind the entry point with no route of its own,
+        // so anywhere but a local run this row is meant to read as unreachable.
         ("RoomServer", "http://localhost:5002"),
     ];
 

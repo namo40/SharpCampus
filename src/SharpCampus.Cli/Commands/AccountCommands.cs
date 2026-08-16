@@ -13,7 +13,6 @@ namespace SharpCampus.Cli.Commands;
 [RegisterCommands]
 internal sealed class AccountCommands
 {
-    private const string ApiServerAddress = "http://localhost:5001";
     private const string ApiServerLabel = "ApiServer";
 
     /// <summary>Creates a Supabase account and signs in with it.</summary>
@@ -73,7 +72,7 @@ internal sealed class AccountCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = MagicOnionClient.Create<IAccountService>(channel)
             .WithHeaders(new Metadata { { "authorization", $"Bearer {session.AccessToken}" } });
 
@@ -92,7 +91,7 @@ internal sealed class AccountCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 
@@ -115,7 +114,7 @@ internal sealed class AccountCommands
             return;
         }
 
-        using var channel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var channel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var client = MagicOnionClient.Create<IProfileService>(channel)
             .WithHeaders(new Metadata { { "authorization", $"Bearer {session.AccessToken}" } });
 
@@ -140,7 +139,7 @@ internal sealed class AccountCommands
         }
         catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ApiServerAddress)}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.ServerUnreachable, ApiServerLabel, ClientEndpoints.ApiServer)}[/]");
         }
     }
 }

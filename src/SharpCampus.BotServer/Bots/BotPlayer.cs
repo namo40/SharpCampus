@@ -87,13 +87,17 @@ internal sealed class BotPlayer(
 
     private async Task PlayAsync(BotAccount account, MatchTicket ticket, CancellationToken cancellationToken)
     {
-        using var roomChannel = GrpcChannel.ForAddress(ticket.Endpoint);
+        using var roomChannel = GrpcChannel.ForAddress(_options.RoomEndpoint(ticket.Endpoint));
         using var receiver = new BotReceiver();
+
+        // The entry point routes the stream by this header to the server that owns the room; a connection
+        // straight to a room server ignores it.
+        var hubHeaders = Authorization(account);
+        hubHeaders.Add("room-id", ticket.RoomId.ToString());
 
         // No client heartbeat: the room server runs one in the other direction, which is what notices
         // a bot that vanishes, and a bot has no round trip to show anybody.
-        var hubOptions = StreamingHubClientOptions.CreateWithDefault(
-            callOptions: new CallOptions(Authorization(account)));
+        var hubOptions = StreamingHubClientOptions.CreateWithDefault(callOptions: new CallOptions(hubHeaders));
 
         var hub = await StreamingHubClient.ConnectAsync<IDuelHub, IDuelHubReceiver>(
             roomChannel,

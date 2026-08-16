@@ -18,7 +18,6 @@ namespace SharpCampus.Cli.Commands;
 [RegisterCommands]
 internal sealed class DuelCommand
 {
-    private const string ApiServerAddress = "http://localhost:5001";
     private static readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan _startTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan _heartbeatInterval = TimeSpan.FromSeconds(1);
@@ -39,7 +38,7 @@ internal sealed class DuelCommand
 
         var authorization = new Metadata { { "authorization", $"Bearer {session.AccessToken}" } };
 
-        using var apiChannel = GrpcChannel.ForAddress(ApiServerAddress);
+        using var apiChannel = GrpcChannel.ForAddress(ClientEndpoints.ApiServer);
         var matchmaking = MagicOnionClient.Create<IMatchmakingService>(apiChannel).WithHeaders(authorization);
 
         try
@@ -107,9 +106,17 @@ internal sealed class DuelCommand
         var status = new DuelStatus();
         var receiver = new DuelReceiver(status);
 
+        // The entry point routes the stream by this header to the server that owns the room; a connection
+        // straight to a room server ignores it.
+        var hubHeaders = new Metadata { { "room-id", ticket.RoomId.ToString() } };
+        foreach (var header in authorization)
+        {
+            hubHeaders.Add(header);
+        }
+
         // The client heartbeat is what measures the round trip the HUD shows. The server runs one of
         // its own in the other direction, which is what notices a client that vanishes without saying so.
-        var options = StreamingHubClientOptions.CreateWithDefault(callOptions: new CallOptions(authorization))
+        var options = StreamingHubClientOptions.CreateWithDefault(callOptions: new CallOptions(hubHeaders))
             .WithClientHeartbeatInterval(_heartbeatInterval)
             .WithClientHeartbeatResponseReceived(heartbeat => status.Measure(heartbeat.RoundTripTime));
 
