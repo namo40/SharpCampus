@@ -8,17 +8,28 @@ internal sealed class MissionProgressSubscription(
     IAsyncSubscriber<MatchFinishedEvent> matchFinished,
     MissionProgressHandler handler) : IHostedService
 {
+    private readonly InFlightHandler<MatchFinishedEvent> _inFlight = new(handler);
     private IDisposable? _subscription;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _subscription = matchFinished.Subscribe(handler);
+        _subscription = matchFinished.Subscribe(_inFlight);
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
         _subscription?.Dispose();
-        return Task.CompletedTask;
+
+        try
+        {
+            // Same wait as the settlement's: this subscriber's writes are its own, and so is the last
+            // one still in flight when shutdown reaches here.
+            await _inFlight.WhenIdleAsync().WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutdown has run out of patience; whatever was written is written.
+        }
     }
 }

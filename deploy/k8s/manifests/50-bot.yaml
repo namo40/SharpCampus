@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot
+  namespace: sharpcampus
+  labels:
+    app: bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bot
+  template:
+    metadata:
+      labels:
+        app: bot
+    spec:
+      containers:
+        - name: bot
+          image: sharpcampus-botserver
+          imagePullPolicy: Never
+          ports:
+            - name: grpc
+              containerPort: 5003
+            - name: ops
+              containerPort: 5013
+          env:
+            - name: Kestrel__Endpoints__Grpc__Url
+              value: http://0.0.0.0:5003
+            - name: Kestrel__Endpoints__Web__Url
+              value: http://0.0.0.0:5013
+            # A bot is a client, so it comes in through the front door like one.
+            - name: BotServer__ApiServerAddress
+              value: http://envoy:5000
+            - name: BotServer__RoomEndpointOverride
+              value: http://envoy:5000
+            - name: BotServer__SupabaseAuthUrl
+              value: http://supabase-auth:54321
+            # Must stay below the ApiServer's BotFallback__SummonAfterSeconds: a bot that gave up
+            # waiting has to be out of the queue before it becomes the lone waiting account and draws a
+            # bot of its own. The two live in different processes, so nothing at startup can check this.
+            - name: BotServer__QueueTimeoutSeconds
+              value: "10"
+          # Liveness only: this server registers no readiness checks, so /readyz would say nothing
+          # /healthz has not already said.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: ops
+            periodSeconds: 10
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bot
+  namespace: sharpcampus
+  labels:
+    app: bot
+spec:
+  selector:
+    app: bot
+  ports:
+    - name: grpc
+      port: 5003
+      targetPort: grpc

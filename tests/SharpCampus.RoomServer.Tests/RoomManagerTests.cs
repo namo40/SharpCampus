@@ -13,6 +13,8 @@ namespace SharpCampus.RoomServer.Tests;
 
 public class RoomManagerTests
 {
+    private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
+
     [Fact]
     public async Task CreatedRoom_IsTheOneThatComesBackForItsId()
     {
@@ -191,6 +193,82 @@ public class RoomManagerTests
         pool.Tick(2);
 
         await locations.Received(1).RemoveAsync(roomId);
+    }
+
+    [Fact]
+    public async Task DrainingServer_TakesNoMoreRoomsAndFilesNone()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var locations = RoomFixture.Locations();
+        var manager = CreateManager(pool, locations: locations);
+        var roomId = new RoomId(Ulid.NewUlid());
+
+        manager.BeginDrain();
+
+        Assert.Equal(CreateRoomOutcome.Draining, await manager.CreateAsync(roomId, RoomFixture.Players()));
+        Assert.False(manager.TryGet(roomId, out _));
+        Assert.Equal(0, manager.RoomCount);
+        await locations.DidNotReceive().StoreAsync(roomId, Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task RoomsFromBeforeTheDrain_AreStillPlayedOut()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var manager = CreateManager(pool, joinTimeoutTicks: 4);
+        var roomId = new RoomId(Ulid.NewUlid());
+        await manager.CreateAsync(roomId, RoomFixture.Players());
+
+        manager.BeginDrain();
+        pool.Tick();
+
+        Assert.True(manager.TryGet(roomId, out var room));
+        Assert.False(room!.IsClosed);
+        Assert.Equal(1, manager.RoomCount);
+    }
+
+    [Fact]
+    public async Task Drain_IsOverWhenTheLastRoomCloses()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var manager = CreateManager(pool, joinTimeoutTicks: 2);
+        await manager.CreateAsync(new RoomId(Ulid.NewUlid()), RoomFixture.Players());
+
+        manager.BeginDrain();
+        var idle = manager.WaitForIdleAsync();
+
+        Assert.False(idle.IsCompleted);
+
+        pool.Tick(2);
+
+        await idle.WaitAsync(_timeout, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DrainWithNothingRunning_IsOverAtOnce()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var manager = CreateManager(pool);
+
+        manager.BeginDrain();
+
+        await manager.WaitForIdleAsync().WaitAsync(_timeout, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DrainStartedTwice_IsTheSameDrain()
+    {
+        using var pool = new ManualLogicLooperPool(20);
+        var manager = CreateManager(pool);
+
+        manager.BeginDrain();
+        manager.BeginDrain();
+
+        Assert.True(manager.IsDraining);
+        Assert.Equal(
+            CreateRoomOutcome.Draining,
+            await manager.CreateAsync(new RoomId(Ulid.NewUlid()), RoomFixture.Players()));
+        await manager.WaitForIdleAsync().WaitAsync(_timeout, TestContext.Current.CancellationToken);
     }
 
     private static RoomManager CreateManager(

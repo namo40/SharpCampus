@@ -54,6 +54,11 @@ builder.Services.AddSingleton<RoomManager>();
 builder.Services.AddSingleton<RoomMetrics>();
 builder.Services.AddHostedService<RoomRegistryHeartbeat>();
 
+// Nothing binds HostOptions from configuration on its own, and the drain wait in StoppingAsync runs
+// under its ShutdownTimeout.
+builder.Services.Configure<HostOptions>(builder.Configuration.GetSection("HostOptions"));
+builder.Services.AddHostedService<RoomDrainService>();
+
 // The tick loop only decides who won; what a win is worth happens on the other side of this.
 builder.Services.AddMessagePipe();
 builder.Services.AddScoped<IMatchSettlementService, MatchSettlementService>();

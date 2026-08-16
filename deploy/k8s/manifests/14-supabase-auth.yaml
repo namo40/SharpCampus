@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: supabase-auth-secret
+  namespace: sharpcampus
+type: Opaque
+stringData:
+  # The signing key of a throwaway local identity provider, in the repository on purpose: what is worth
+  # showing is that the servers never hold it, only the public half they fetch from JWKS.
+  # Production note: a real key is generated per environment and kept out of the manifests, through a
+  # sealed secret or an external secret store.
+  GOTRUE_JWT_KEYS: '[{"kty":"EC","crv":"P-256","x":"UqzjBnOT59v-X42KNzQHpe68w_piLTl3fDhnPyTCfDg","y":"H7NDLDfBjoMhhK-aUApQ_lSkER-NJg7_N00pVmOJTlU","d":"QKZ0mJq2c9sCdHrur4VkO7o5_9ru-8Qist8XtrT6lA8","kid":"sharpcampus-es256","use":"sig","alg":"ES256","key_ops":["sign","verify"]}]'
+  # Unused: the key above is what signs, but GoTrue still refuses to start without the legacy shared
+  # secret configured.
+  GOTRUE_JWT_SECRET: sharpcampus-unused-legacy-secret
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-auth-nginx
+  namespace: sharpcampus
+data:
+  default.conf: |
+    server {
+      listen 54321;
+
+      # Clients and servers alike speak the Supabase URL shape, where every auth call lives under
+      # /auth/v1. GoTrue serves the same routes at the root, so the prefix is stripped here rather than
+      # taught to every caller.
+      location /auth/v1/ {
+        proxy_pass http://127.0.0.1:9999/;
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-auth
+  namespace: sharpcampus
+  labels:
+    app: supabase-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: supabase-auth
+  template:
+    metadata:
+      labels:
+        app: supabase-auth
+    spec:
+      initContainers:
+        # GoTrue exits when the database is not there yet, and a crash loop backs off further than the
+        # first boot of a database with a schema to load takes.
+        - name: wait-for-db
+          image: postgres:17-alpine
+          command: ["sh", "-c", "until pg_isready -h supabase-db -U postgres; do sleep 2; done"]
+      containers:
+        - name: gotrue
+          image: supabase/auth:v2.192.0
+          ports:
+            - name: gotrue
+              containerPort: 9999
+          env:
+            - name: GOTRUE_API_HOST
+              value: 0.0.0.0
+            - name: GOTRUE_API_PORT
+              value: "9999"
+            # Every absolute URL GoTrue publishes is built from this, the discovery document's issuer and
+            # jwks_uri included. It names the service, so a server pod can follow what it reads.
+            - name: API_EXTERNAL_URL
+              value: http://supabase-auth:54321/auth/v1
+            # The `iss` claim of every token issued. It has to be the address above, because that is
+            # where the server that validates the token goes looking for the key that signed it.
+            - name: GOTRUE_JWT_ISSUER
+              value: http://supabase-auth:54321/auth/v1
+            - name: GOTRUE_JWT_AUD
+              value: authenticated
+            - name: GOTRUE_JWT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-auth-secret
+                  key: GOTRUE_JWT_KEYS
+            - name: GOTRUE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-auth-secret
+                  key: GOTRUE_JWT_SECRET
+            - name: GOTRUE_DB_DRIVER
+              value: postgres
+            # GoTrue's own tables live in the auth schema and it queries them unqualified, so the search
+            # path is what points it there. The game tables keep the default path to themselves.
+            - name: GOTRUE_DB_DATABASE_URL
+              value: "postgres://postgres:postgres@supabase-db:5432/postgres?sslmode=disable&search_path=auth"
+            # Nothing here sends mail, so an account is usable the moment it is created.
+            - name: GOTRUE_MAILER_AUTOCONFIRM
+              value: "true"
+            - name: GOTRUE_EXTERNAL_EMAIL_ENABLED
+              value: "true"
+            - name: GOTRUE_DISABLE_SIGNUP
+              value: "false"
+            # Only ever the base of a redirect back to a browser, which no console client asks for.
+            - name: GOTRUE_SITE_URL
+              value: http://localhost
+
+        - name: nginx
+          image: nginx:1.29-alpine
+          ports:
+            - name: http
+              containerPort: 54321
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+          # Asked through the proxy on purpose: a GoTrue nobody can reach is not a ready pod.
+          readinessProbe:
+            httpGet:
+              path: /auth/v1/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: supabase-auth-nginx
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-auth
+  namespace: sharpcampus
+  labels:
+    app: supabase-auth
+spec:
+  # The console client signs in at the address compiled into it, so this port has to answer on the host
+  # as well as inside the cluster. Both reach the same pod, and the token says the same thing either way.
+  type: NodePort
+  selector:
+    app: supabase-auth
+  ports:
+    - name: http
+      port: 54321
+      targetPort: http
+      nodePort: 30431

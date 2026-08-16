@@ -220,6 +220,42 @@ docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
 이렇게 하면 서버 네 대의 지표 엔드포인트를 모두 긁어 가는 Prometheus가 함께 뜹니다. 주소는
 <http://localhost:19090>입니다. 흔히 쓰는 9090은 Windows가 예약해 둔 포트 범위 안에 들어가기 때문입니다.
 
+## Kubernetes(kind)로 전체 스택 띄우기
+
+같은 이미지와 같은 Envoy 진입점을 이번에는 노드 3개짜리 로컬 kind 클러스터에 올립니다. 이번 구성은 그 자체로
+완결되어 있어서, 게임 서버 옆에 PostgreSQL과 Supabase Auth(GoTrue)까지 클러스터 안에서 함께 돌립니다. 즉, 위의
+Docker 구성과 달리 개발자 본인의 `supabase start` 스택이 필요하지 않습니다. 대전 서버 두 대는 StatefulSet이
+되고, 롤링 업데이트는 진행 중인 대전이 끝난 뒤에야 그 판을 돌리던 파드를 내립니다.
+
+준비물은 이미지를 빌드하는 데만 쓰는 Docker Desktop과 [kind](https://kind.sigs.k8s.io/),
+[kubectl](https://kubernetes.io/docs/tasks/tools/)입니다. 반대로 개발용 Supabase 스택은 떠 있으면 안 됩니다.
+클러스터가 자체 인증 엔드포인트로 호스트의 54321번 포트를 가져가기 때문이니, 떠 있다면 먼저 `supabase stop`으로
+내립니다. 그러면 콘솔 클라이언트에 박혀 있는 인증 주소가 그대로 클러스터 안의 GoTrue에 닿습니다.
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml build
+kind create cluster --config deploy/k8s/kind-cluster.yaml
+kind load docker-image sharpcampus-apiserver sharpcampus-roomserver sharpcampus-botserver --name sharpcampus
+kubectl apply -f deploy/k8s/manifests/
+kubectl create configmap sharpcampus-schema --from-file=schema.sql=deploy/db/schema.sql -n sharpcampus
+kubectl get pods -n sharpcampus
+```
+
+게임 스키마는 `deploy/db/schema.sql` 파일 하나로 유지하므로, 매니페스트에 복사해 넣지 않고 그 파일에서 바로
+클러스터로 건네줍니다. `kubectl create configmap` 줄이 하는 일이 그것입니다. 데이터베이스 파드는 아직 없는
+것을 마운트할 수 없으니 그 컨피그맵이 생길 때까지 기다렸다가, 처음 부팅할 때 스키마를 적용합니다.
+
+모든 파드가 준비 상태가 되면, 클라이언트는 컴포즈 때와 똑같이 `SHARPCAMPUS_SERVER=http://localhost:5000`으로
+접속합니다. 클러스터가 진입점을 같은 호스트 포트에 연결해 두기 때문입니다. 가입과 로그인도 그대로 됩니다. 인증
+역시 클라이언트가 이미 쓰던 그 호스트 포트에서 응답하기 때문입니다.
+
+이 구성이 흥미로워지는 지점은 롤링 업데이트입니다. `kubectl rollout restart statefulset/room -n sharpcampus`는
+대전 서버를 한 대씩 교체하는데, 교체 대상이 된 서버는 그냥 멈추지 않고 드레이닝을 거칩니다. 즉, 먼저
+매치메이킹에서 빠지고, 아직 돌리고 있는 대전을 전부 끝낸 다음에 종료합니다. 그동안 새 대전은 계속 남은 대전
+서버로 들어가므로, 롤링 업데이트가 진행 중인 대전을 중간에 끊는 일은 없습니다.
+
+다 사용했으면 `kind delete cluster --name sharpcampus`로 클러스터를 정리합니다.
+
 ## 라이선스
 
 MIT 라이선스를 따릅니다. [LICENSE](LICENSE)를 참고하세요.

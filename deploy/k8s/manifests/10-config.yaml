@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: server-config
+  namespace: sharpcampus
+data:
+  Redis__ConnectionString: redis:6379
+  Database__ConnectionString: Host=supabase-db;Port=5432;Username=postgres;Password=postgres;Database=postgres
+  # The cluster runs its own Supabase Auth, so the address a server reaches it at is also the address
+  # the tokens are signed as coming from. Nothing has to bridge the two.
+  Supabase__Url: http://supabase-auth:54321
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sharpcampus-secrets
+  namespace: sharpcampus
+type: Opaque
+stringData:
+  # A local credential, in the repository on purpose: what is worth showing is where the servers read
+  # it from, not the value.
+  # Production note: a real secret comes from outside the manifests, through a sealed secret or an
+  # external secret store.
+  EntryToken__Secret: sharpcampus-k8s-entry-token-secret

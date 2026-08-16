@@ -115,6 +115,37 @@ public class RoomRegistryHeartbeatTests
         await _registry.Received(1).RemoveAsync("test");
     }
 
+    [Fact]
+    public async Task DrainingServer_IsNotPutBackIntoTheRegistryByALaterBeat()
+    {
+        var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _registry.When(registry => registry.RegisterAsync(Arg.Any<RoomServerEntry>()))
+            .Do(_ => registered.TrySetResult());
+
+        using var pool = new ManualLogicLooperPool(20);
+        var options = RoomFixture.Options();
+        var rooms = CreateRooms(pool, options);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var heartbeat = CreateHeartbeat(rooms, options);
+
+        await heartbeat.StartAsync(cancellationToken);
+
+        try
+        {
+            await registered.Task.WaitAsync(_timeout, cancellationToken);
+            rooms.BeginDrain();
+
+            // Longer than the beat period, so a beat that went on registering would have been seen by now.
+            await Task.Delay(TimeSpan.FromSeconds(6), cancellationToken);
+
+            await _registry.Received(1).RegisterAsync(Arg.Any<RoomServerEntry>());
+        }
+        finally
+        {
+            await heartbeat.StopAsync(cancellationToken);
+        }
+    }
+
     private static RedisConnectionException RedisDown() =>
         new(ConnectionFailureType.UnableToConnect, CommandFlags.None, "down");
 

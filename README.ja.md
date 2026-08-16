@@ -226,6 +226,44 @@ docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
 こうすると、4 つのサーバーの計測エンドポイントをすべて収集する Prometheus が一緒に起動します。宛先は
 <http://localhost:19090> です。よく使われる 9090 は、Windows が予約しているポート範囲に入ってしまうためです。
 
+## Kubernetes（kind）でスタック全体を動かす
+
+同じイメージと同じ Envoy の入口を、今度はローカルの 3 ノード kind クラスターに載せます。今回の構成はそれ自体で
+完結しており、ゲームサーバーの隣で PostgreSQL と Supabase Auth（GoTrue）もクラスターの中で動かします。つまり、
+上の Docker 構成とは違って、開発者自身の `supabase start` のスタックは要りません。対戦サーバー 2 台は
+StatefulSet になり、ローリングアップデートは進行中の試合が終わってから、それを動かしていた Pod を落とします。
+
+必要なものは、イメージのビルドにだけ使う Docker Desktop と [kind](https://kind.sigs.k8s.io/)、
+[kubectl](https://kubernetes.io/docs/tasks/tools/) です。逆に、開発用の Supabase スタックは起動していては
+いけません。クラスターが自前の認証エンドポイント用にホストの 54321 番ポートを取るためで、起動しているなら先に
+`supabase stop` で止めます。そうすればコンソールクライアントに埋め込まれた認証の宛先が、そのままクラスター内の
+GoTrue に届きます。
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml build
+kind create cluster --config deploy/k8s/kind-cluster.yaml
+kind load docker-image sharpcampus-apiserver sharpcampus-roomserver sharpcampus-botserver --name sharpcampus
+kubectl apply -f deploy/k8s/manifests/
+kubectl create configmap sharpcampus-schema --from-file=schema.sql=deploy/db/schema.sql -n sharpcampus
+kubectl get pods -n sharpcampus
+```
+
+ゲームのスキーマは `deploy/db/schema.sql` という一つのファイルのままなので、マニフェストに写し取るのではなく、
+そのファイルからクラスターへ直接渡します。`kubectl create configmap` の行がそれです。データベースの Pod は
+まだ存在しないものはマウントできないので、その ConfigMap ができるまで待ち、最初の起動でスキーマを適用します。
+
+すべての Pod が Ready になれば、クライアントは Compose のときとまったく同じく
+`SHARPCAMPUS_SERVER=http://localhost:5000` で接続します。クラスターが入口を同じホストポートに割り当てて
+いるからです。サインアップとログインもそのまま動きます。認証も、クライアントがすでに使っているのと同じホスト
+ポートで応答するからです。
+
+この形が面白くなるのはローリングアップデートです。`kubectl rollout restart statefulset/room -n sharpcampus` は
+対戦サーバーを 1 台ずつ入れ替えますが、入れ替えの対象になったサーバーはただ止まるのではなくドレインします。
+つまり、まずマッチメイキングから抜け、まだ動かしている対戦をすべて終えてから終了します。その間も新しい対戦は
+残りの対戦サーバーへ入り続けるので、ローリングアップデートが進行中の試合を途中で切ることはありません。
+
+使い終わったら `kind delete cluster --name sharpcampus` でクラスターを片付けます。
+
 ## ライセンス
 
 MIT ライセンスです。[LICENSE](LICENSE) を参照してください。

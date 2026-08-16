@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: supabase-db-secret
+  namespace: sharpcampus
+type: Opaque
+stringData:
+  # A local credential, in the repository on purpose: what is worth showing is where the database reads
+  # it from, not the value.
+  # Production note: a real secret comes from outside the manifests, through a sealed secret or an
+  # external secret store.
+  POSTGRES_PASSWORD: postgres
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-db-init
+  namespace: sharpcampus
+data:
+  # GoTrue's migrations create every table it needs, but not the schema they are created in, and a stock
+  # postgres image has no auth schema.
+  10-auth-schema.sql: |
+    CREATE SCHEMA IF NOT EXISTS auth;
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: supabase-db
+  namespace: sharpcampus
+  labels:
+    app: supabase-db
+spec:
+  replicas: 1
+  serviceName: supabase-db
+  selector:
+    matchLabels:
+      app: supabase-db
+  template:
+    metadata:
+      labels:
+        app: supabase-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-db-secret
+                  key: POSTGRES_PASSWORD
+            # The volume is mounted a level above the data directory, so initdb starts from a directory
+            # it owns rather than one the volume plugin already put something in.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          # Accepting connections is the readiness question; the port is open well before that.
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: postgres
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        # The game schema stays a single file, so it is handed to the cluster from that file rather than
+        # copied into a manifest:
+        #   kubectl create configmap sharpcampus-schema \
+        #     --from-file=schema.sql=deploy/db/schema.sql -n sharpcampus
+        # Until that exists this pod cannot mount and does not start, which is the whole dependency.
+        # Nothing in it touches the auth schema, so the order of the two scripts is free.
+        - name: init
+          projected:
+            sources:
+              - configMap:
+                  name: supabase-db-init
+              - configMap:
+                  name: sharpcampus-schema
+                  items:
+                    - key: schema.sql
+                      path: 20-sharpcampus-schema.sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supabase-db
+  namespace: sharpcampus
+  labels:
+    app: supabase-db
+spec:
+  selector:
+    app: supabase-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

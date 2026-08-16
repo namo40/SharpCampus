@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: sharpcampus
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: sharpcampus-apiserver
+          # Built locally and put into the cluster with `kind load docker-image`. There is no registry
+          # to pull from, so a pull attempt is a failure rather than a fallback.
+          imagePullPolicy: Never
+          ports:
+            - name: grpc
+              containerPort: 5001
+            - name: ops
+              containerPort: 5011
+          envFrom:
+            - configMapRef:
+                name: server-config
+          env:
+            - name: Kestrel__Endpoints__Grpc__Url
+              value: http://0.0.0.0:5001
+            - name: Kestrel__Endpoints__Web__Url
+              value: http://0.0.0.0:5011
+            - name: EntryToken__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: sharpcampus-secrets
+                  key: EntryToken__Secret
+            - name: BotFallback__ControlEndpoint
+              value: http://bot:5003
+            - name: BotFallback__SummonAfterSeconds
+              value: "15"
+          # A server that comes up before Redis does exits. Nothing here orders the two: restarting is
+          # how a server waits.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: ops
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: ops
+            periodSeconds: 5
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: sharpcampus
+  labels:
+    app: api
+spec:
+  # Headless, so the entry point resolves every pod address and balances across them itself. A single
+  # virtual address would pin each long-lived HTTP/2 connection to whichever pod it first landed on.
+  clusterIP: None
+  selector:
+    app: api
+  ports:
+    - name: grpc
+      port: 5001
+      targetPort: grpc
+    - name: ops
+      port: 5011
+      targetPort: ops

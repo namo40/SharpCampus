@@ -27,12 +27,20 @@ public sealed class RoomManager(
 {
     private readonly ConcurrentDictionary<RoomId, DuelRoom> _rooms = new();
 
+    // Completed by whoever sees the last room go while draining. Release runs on the loop thread, and a
+    // waiter's continuation must never run there: shutdown work would be ticking the rooms it waits on.
+    private readonly TaskCompletionSource _idle = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     // Creation registers a loop action and has to respect the capacity it just read, so it is serialised;
     // lookups stay lock free.
     private readonly Lock _createGate = new();
 
+    private volatile bool _draining;
+
     // ReSharper disable once InconsistentlySynchronizedField
     internal int RoomCount => _rooms.Count;
+
+    internal bool IsDraining => _draining;
 
     // Rooms only ever come into being through the ApiServer: there is no path from a client to a new room.
     internal async Task<CreateRoomOutcome> CreateAsync(RoomId roomId, RoomPlayer[] players)
@@ -52,11 +60,46 @@ public sealed class RoomManager(
     // ReSharper disable once InconsistentlySynchronizedField
     internal bool TryGet(RoomId roomId, out DuelRoom? room) => _rooms.TryGetValue(roomId, out room);
 
+    // Taken under the creation gate so no room slips in behind a decision already made, and idempotent
+    // because the host can reach shutdown from more than one direction. The rooms already here keep
+    // ticking and stay reachable; only creation is refused.
+    // Production note: once the pod leaves its service, a player who drops mid-drain cannot get back in
+    // and loses the seat when its disconnect grace runs out.
+    internal void BeginDrain()
+    {
+        lock (_createGate)
+        {
+            _draining = true;
+        }
+
+        // The last room may have been released while the flag was still unset, which is why emptiness is
+        // read again here and in WaitForIdleAsync rather than trusted to Release alone.
+        if (_rooms.IsEmpty)
+        {
+            _idle.TrySetResult();
+        }
+    }
+
+    internal Task WaitForIdleAsync()
+    {
+        if (_rooms.IsEmpty)
+        {
+            _idle.TrySetResult();
+        }
+
+        return _idle.Task;
+    }
+
     // The gate cannot be held across an await, so everything that has to happen under it happens here.
     private CreateRoomOutcome Register(RoomId roomId, RoomPlayer[] players)
     {
         lock (_createGate)
         {
+            if (_draining)
+            {
+                return CreateRoomOutcome.Draining;
+            }
+
             if (_rooms.ContainsKey(roomId))
             {
                 return CreateRoomOutcome.AlreadyExists;
@@ -107,6 +150,12 @@ public sealed class RoomManager(
     private void Release(DuelRoom room)
     {
         _rooms.TryRemove(new KeyValuePair<RoomId, DuelRoom>(room.RoomId, room));
+
+        if (_draining && _rooms.IsEmpty)
+        {
+            _idle.TrySetResult();
+        }
+
         _ = locations.RemoveAsync(room.RoomId);
 
         foreach (var player in room.Players)

@@ -169,13 +169,14 @@ internal static class RoomFixture
         return new MemoryDatabase(builder.Build());
     }
 
-    public static IOptions<RoomServerOptions> Options(int capacity = 100) =>
+    public static IOptions<RoomServerOptions> Options(int capacity = 100, int drainTimeoutSeconds = 0) =>
         Microsoft.Extensions.Options.Options.Create(new RoomServerOptions
         {
             Name = "test",
             ClientEndpoint = "http://localhost:5002",
             ControlEndpoint = "http://localhost:5002",
             Capacity = capacity,
+            DrainTimeoutSeconds = drainTimeoutSeconds,
         });
 
     public static DuelRules Rules(

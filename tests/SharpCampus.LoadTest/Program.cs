@@ -16,6 +16,13 @@ builder.ConfigureServices(services =>
 {
     services.Configure<BotServerOptions>(options =>
     {
+        // The same switch the console client honours, so the one env var aims this harness at a direct
+        // server or at the deployed entry point alike.
+        if (Environment.GetEnvironmentVariable("SHARPCAMPUS_SERVER") is { Length: > 0 } server)
+        {
+            options.ApiServerAddress = server;
+        }
+
         // A pool of this harness's own. Nicknames are unique across accounts, so virtual players cannot
         // wear the names the bot server's accounts already hold.
         options.EmailPattern = "loadtest{0}@sharpcampus.dev";

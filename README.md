@@ -235,6 +235,47 @@ docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
 That adds a Prometheus scraping all four servers' metric endpoints, published on
 <http://localhost:19090> — the customary 9090 falls inside a port range Windows reserves.
 
+## The full stack on Kubernetes (kind)
+
+The same images behind the same Envoy entry point, this time on a local three-node kind cluster — and
+this one is fully self-contained: a PostgreSQL and a Supabase Auth (GoTrue) of its own run in the
+cluster beside the servers, so unlike the compose stack above nothing here needs your own
+`supabase start` stack. The two match servers become a StatefulSet, and a rolling update lets a live
+match finish before the pod playing it goes down.
+
+It wants Docker Desktop, this time only to build the images, plus [kind](https://kind.sigs.k8s.io/)
+and [kubectl](https://kubernetes.io/docs/tasks/tools/). What it does not want is your own Supabase
+dev stack running: the cluster claims host port 54321 for its own auth endpoint, so `supabase stop`
+first if it is up. The console client then reaches the in-cluster GoTrue at the auth address compiled
+into it, unchanged.
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml build
+kind create cluster --config deploy/k8s/kind-cluster.yaml
+kind load docker-image sharpcampus-apiserver sharpcampus-roomserver sharpcampus-botserver --name sharpcampus
+kubectl apply -f deploy/k8s/manifests/
+kubectl create configmap sharpcampus-schema --from-file=schema.sql=deploy/db/schema.sql -n sharpcampus
+kubectl get pods -n sharpcampus
+```
+
+The game schema stays the single file `deploy/db/schema.sql`, so the `kubectl create configmap` line
+hands it to the cluster from that file rather than from a copy pasted into a manifest. The database
+pod cannot mount what is not there yet, so it waits for that configmap and applies the schema on its
+first boot.
+
+Once every pod reports ready, the client connects exactly as it did under compose, with
+`SHARPCAMPUS_SERVER=http://localhost:5000` — the cluster maps the entry point onto that same host
+port. Signing up and logging in work unchanged too, because auth answers on the host port the client
+already uses.
+
+What makes this shape worth running is what a rolling update does to it.
+`kubectl rollout restart statefulset/room -n sharpcampus` replaces the match servers one at a time,
+and a server being replaced drains rather than stops: it leaves matchmaking first, then plays out the
+duels it is still running before it exits. New matches keep landing on the other match server
+meanwhile, so a rolling update never cuts a live match short.
+
+Tear the cluster back down with `kind delete cluster --name sharpcampus`.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: room
+  namespace: sharpcampus
+  labels:
+    app: room
+spec:
+  replicas: 2
+  serviceName: room
+  # Nothing about a room server is singular and none of them depends on another, so they come up
+  # together rather than in ordinal order.
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: room
+  template:
+    metadata:
+      labels:
+        app: room
+    spec:
+      # A match outlives a shutdown signal: the pod is given long enough to finish the duels it is
+      # already running before it is killed outright.
+      terminationGracePeriodSeconds: 300
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: room
+      containers:
+        - name: room
+          image: sharpcampus-roomserver
+          imagePullPolicy: Never
+          ports:
+            - name: grpc
+              containerPort: 5002
+            - name: ops
+              containerPort: 5012
+          envFrom:
+            - configMapRef:
+                name: server-config
+          env:
+            - name: Kestrel__Endpoints__Grpc__Url
+              value: http://0.0.0.0:5002
+            - name: Kestrel__Endpoints__Web__Url
+              value: http://0.0.0.0:5012
+            - name: EntryToken__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: sharpcampus-secrets
+                  key: EntryToken__Secret
+            # The registry entry, the entry point's cluster and this pod's DNS name are all this one
+            # name, which is why the ordinal identity of a StatefulSet is what a room server needs.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RoomServer__Name
+              value: $(POD_NAME)
+            # The address a ticket prints is for clients outside; the bot inside overrides it with the
+            # entry point's internal name.
+            - name: RoomServer__ClientEndpoint
+              value: http://localhost:5000
+            - name: RoomServer__ControlEndpoint
+              value: http://$(POD_NAME).room:5002
+            # Ordered chain, each one inside the next: draining finishes at 240s, the host stops at
+            # 270s, and only then does the grace period above run out.
+            - name: RoomServer__DrainTimeoutSeconds
+              value: "240"
+            - name: HostOptions__ShutdownTimeout
+              value: 00:04:30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: ops
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: ops
+            periodSeconds: 5
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: room
+  namespace: sharpcampus
+  labels:
+    app: room
+spec:
+  clusterIP: None
+  # A draining pod is not ready by design, and dropping its DNS record would cut the matches it is
+  # still playing out. The record has to outlive readiness, not track it.
+  publishNotReadyAddresses: true
+  selector:
+    app: room
+  ports:
+    - name: grpc
+      port: 5002
+      targetPort: grpc
+    - name: ops
+      port: 5012
+      targetPort: ops
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: room
+  namespace: sharpcampus
+spec:
+  # A node drain may take one room server at a time. Taking both would leave matchmaking with nowhere
+  # to put a match.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: room

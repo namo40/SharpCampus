@@ -15,6 +15,9 @@ public enum CreateRoomOutcome : byte
 
     /// <summary>The server already has a room under that identifier.</summary>
     AlreadyExists = 2,
+
+    /// <summary>The server is shutting down and takes no further rooms.</summary>
+    Draining = 3,
 }
 
 /// <summary>

@@ -16,4 +16,9 @@ public sealed class RoomServerOptions
     public string ControlEndpoint { get; set; } = "";
 
     public int Capacity { get; set; } = 100;
+
+    // How long shutdown waits for the rooms already playing to finish; 0 waits for nothing, which is what
+    // a local run wants. Must stay below HostOptions:ShutdownTimeout, which must stay below the pod's
+    // terminationGracePeriodSeconds. The deployment sets all three and nothing at startup can check them.
+    public int DrainTimeoutSeconds { get; set; }
 }

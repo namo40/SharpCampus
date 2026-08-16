@@ -1,0 +1,21 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: sharpcampus
+
+nodes:
+  - role: control-plane
+    # The client outside keeps dialing localhost:5000. A NodePort answers on every node, so mapping it
+    # on this one node is enough no matter which worker the entry point lands on.
+    extraPortMappings:
+      - containerPort: 30500
+        hostPort: 5000
+        protocol: TCP
+      # The client signs in at the address compiled into it, which is the port the developer's own
+      # Supabase stack would have taken. In this cluster the stack is inside, and this is its door.
+      - containerPort: 30431
+        hostPort: 54321
+        protocol: TCP
+
+  # Two workers, so a room server has somewhere else to be scheduled.
+  - role: worker
+  - role: worker

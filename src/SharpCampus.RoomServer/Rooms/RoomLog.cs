@@ -51,6 +51,15 @@ internal static partial class RoomLog
     [ZLoggerMessage(LogLevel.Warning, "A registry heartbeat could not reach Redis: {reason}")]
     public static partial void HeartbeatSkipped(this ILogger logger, string reason);
 
+    [ZLoggerMessage(LogLevel.Information, "Draining with {activeRooms} rooms still playing")]
+    public static partial void DrainStarted(this ILogger logger, int activeRooms);
+
+    [ZLoggerMessage(LogLevel.Information, "Drained: all {drainedRooms} rooms finished on their own")]
+    public static partial void DrainCompleted(this ILogger logger, int drainedRooms);
+
+    [ZLoggerMessage(LogLevel.Warning, "Drain ran out of time with {remainingRooms} rooms still playing")]
+    public static partial void DrainTimedOut(this ILogger logger, int remainingRooms);
+
     [ZLoggerMessage(LogLevel.Error, "Match {matchId} was not settled: {reason}")]
     public static partial void MatchSettlementFailed(this ILogger logger, MatchId matchId, string reason);
 

@@ -26,6 +26,12 @@ internal sealed class RoomRegistryHeartbeat(
         {
             do
             {
+                // A server that has left the registry must not reappear in it between leaving and exiting.
+                if (rooms.IsDraining)
+                {
+                    continue;
+                }
+
                 // A beat that cannot reach Redis is a beat missed, not a dead server: an exception
                 // leaving a BackgroundService stops the whole host, and the entry only expires if
                 // Redis outlives its TTL anyway.
