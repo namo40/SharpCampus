@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpCampus.BotServer.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="MagicOnion.Client" />
+    <PackageReference Include="R3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCampus.Shared\SharpCampus.Shared.csproj" />
+    <ProjectReference Include="..\SharpCampus.Shared.Internal\SharpCampus.Shared.Internal.csproj" />
+    <ProjectReference Include="..\SharpCampus.Server.Common\SharpCampus.Server.Common.csproj" />
+    <ProjectReference Include="..\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
+  </ItemGroup>
+
+</Project>

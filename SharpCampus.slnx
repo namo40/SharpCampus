@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SharpCampus.ApiServer/SharpCampus.ApiServer.csproj" />
+    <Project Path="src/SharpCampus.BotServer/SharpCampus.BotServer.csproj" />
     <Project Path="src/SharpCampus.Cli/SharpCampus.Cli.csproj" />
     <Project Path="src/SharpCampus.GameCore/SharpCampus.GameCore.csproj" />
     <Project Path="src/SharpCampus.RoomServer/SharpCampus.RoomServer.csproj" />
@@ -10,6 +11,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SharpCampus.ApiServer.Tests/SharpCampus.ApiServer.Tests.csproj" />
+    <Project Path="tests/SharpCampus.BotServer.Tests/SharpCampus.BotServer.Tests.csproj" />
     <Project Path="tests/SharpCampus.GameCore.Tests/SharpCampus.GameCore.Tests.csproj" />
     <Project Path="tests/SharpCampus.LoadTest/SharpCampus.LoadTest.csproj" />
     <Project Path="tests/SharpCampus.MasterDataTool.Tests/SharpCampus.MasterDataTool.Tests.csproj" />

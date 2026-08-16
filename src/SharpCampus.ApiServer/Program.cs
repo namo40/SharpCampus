@@ -19,10 +19,13 @@ builder.Services.AddRedis(builder.Configuration);
 builder.Services.AddEntryTokens(builder.Configuration);
 builder.Services.AddMasterData(builder.Configuration);
 
+builder.Services.Configure<BotFallbackOptions>(builder.Configuration.GetSection(BotFallbackOptions.SectionName));
 builder.Services.AddSingleton<IMatchQueue, RedisMatchQueue>();
 builder.Services.AddSingleton<ITicketStore, RedisTicketStore>();
 builder.Services.AddSingleton<IPairingLock, RedisPairingLock>();
 builder.Services.AddSingleton<IRoomControlClient, RoomControlClient>();
+builder.Services.AddSingleton<IBotSummoner, BotSummonerClient>();
+builder.Services.AddSingleton<IBotSummonCooldown, RedisBotSummonCooldown>();
 builder.Services.AddHostedService<MatchmakingWorker>();
 
 var magicOnion = builder.Services.AddMagicOnion(options => options.MessageSerializer = ContractSerialization.Provider);

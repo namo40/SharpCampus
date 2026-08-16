@@ -15,7 +15,8 @@ SharpCampus는 [MagicOnion](https://github.com/Cysharp/MagicOnion)과 [Cysharp](
 | `src/SharpCampus.GameCore` | 네트워크나 호스팅에 의존하지 않는 게임 규칙과 시뮬레이션. 마찬가지로 `netstandard2.1`입니다. |
 | `src/SharpCampus.ApiServer` | 메타 게임 호스트로 계정, 프로필, 매치메이킹을 담당합니다. |
 | `src/SharpCampus.RoomServer` | 서버 권위 틱 루프를 돌리는 실시간 대전 호스트입니다. |
-| `src/SharpCampus.Server.Common` | 두 서버 호스트가 함께 쓰는 공통 구성 요소입니다. |
+| `src/SharpCampus.BotServer` | 대기열에 상대가 없을 때 투입되는 봇 호스트입니다. 봇 계정으로 로그인해 일반 클라이언트와 같은 경로로 플레이합니다. |
+| `src/SharpCampus.Server.Common` | 서버 호스트들이 함께 쓰는 공통 구성 요소입니다. |
 | `src/SharpCampus.Cli` | 게임을 플레이하고 서버를 검증하는 데 쓰는 .NET 콘솔 클라이언트입니다. |
 | `tools/SharpCampus.MasterDataTool` | 게임 마스터 데이터 원본을 검증하고, 배포된 서버가 읽는 데이터베이스 파일을 만드는 커맨드라인 도구입니다. |
 | `masterdata/` | 마스터 데이터 원본으로, 테이블마다 JSON 파일이 하나씩 있습니다. 게임 상수, 중력 커브, 공격·콤보 테이블, 코인 보상과 레이팅 상수, 스킨, 미션이 들어 있습니다. |
@@ -23,6 +24,7 @@ SharpCampus는 [MagicOnion](https://github.com/Cysharp/MagicOnion)과 [Cysharp](
 | `tests/SharpCampus.GameCore.Tests` | `SharpCampus.GameCore` 테스트. |
 | `tests/SharpCampus.ApiServer.Tests` | `SharpCampus.ApiServer` 테스트. |
 | `tests/SharpCampus.RoomServer.Tests` | `SharpCampus.RoomServer` 테스트. |
+| `tests/SharpCampus.BotServer.Tests` | `SharpCampus.BotServer` 테스트. |
 | `tests/SharpCampus.ServerCommon.Tests` | `SharpCampus.Server.Common` 테스트. |
 | `tests/SharpCampus.MasterDataTool.Tests` | `SharpCampus.MasterDataTool` 테스트. |
 | `tests/SharpCampus.LoadTest` | 서버 부하 테스트 도구. |
@@ -93,7 +95,13 @@ dotnet run --project src/SharpCampus.ApiServer
 dotnet run --project src/SharpCampus.RoomServer
 ```
 
-콘솔 클라이언트로 두 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
+터미널을 하나 더 열어 봇 서버도 실행합니다.
+
+```bash
+dotnet run --project src/SharpCampus.BotServer
+```
+
+콘솔 클라이언트로 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -136,6 +144,13 @@ ApiServer에 보내고, 서버는 토큰을 검증한 뒤 어떤 계정인지와
 그 주소로 접속하고, 대전은 콘솔에서 실시간으로 진행됩니다. 두 보드가 나란히 그려지고, 내 조각은 키보드로 조작하며,
 끝나면 재대결을 물어보고, 코인과 레이팅이 양쪽 프로필에 정산됩니다. 각 보드는 그 주인이 장착한 스킨으로 그려지며, 상대
 화면에서도 마찬가지입니다. 서로 다른 계정으로 로그인한 클라이언트 두 개에서 실행하면 혼자서도 한 판을 치를 수 있습니다.
+
+대기열에 아무도 없으면 기다려도 상대가 생기지 않습니다. 그래서 설정한 시간(기본 2분, 개발 설정에서는 15초)이 지나면
+ApiServer가 봇 서버에 상대를 요청합니다. 봇은 자기 계정으로 로그인해 클라이언트와 똑같은 세 번의 호출로 같은 대기열에
+들어가므로, 봇을 자리에 앉히는 것도 위에서 설명한 그 매칭 과정 그대로입니다. 즉, 방도 입장 토큰도 정산도 상대가 봇이라는
+사실을 알지 못합니다. 봇은 한 수 앞만 보는 휴리스틱으로 둡니다. 조각마다 놓을 수 있는 자리를 모두 점수로 매겨 보드가 가장
+낮고 평평하며 빈칸을 묻지 않는 결과를 고른 다음, 거기까지 가는 입력을 R3 스트림으로 한 박자에 하나씩 보냅니다. 그래야
+방이 틱마다 받아 주는 입력 한도 안에 전부 들어갑니다.
 
 `rank`는 레이팅 순위표의 상위 100위를 보여주고, 내 자리는 강조해서 표시합니다. 내가 100위 밖이면 구분선 아래에 따로
 붙여 줍니다. `rank daily`는 같은 방식으로 오늘(UTC 날짜 기준) 정산된 승수 순위표를 읽습니다. 두 순위표 모두 룸 서버가

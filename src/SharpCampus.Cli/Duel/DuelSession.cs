@@ -16,8 +16,8 @@ internal sealed class DuelSession(IDuelHub hub, DuelReceiver receiver, DuelRende
     private static readonly TimeSpan _framePeriod = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan _inputPeriod = TimeSpan.FromMilliseconds(50);
 
-    // Temporary: keeps the pre-bot unattended verification path alive. Remove once a real bot can
-    // take a seat.
+    // Random play for the human seat in unattended verification runs. The other seat is filled by a
+    // bot from the bot server, which plays properly.
     private static readonly GameInput[] _autoMoves =
     [
         GameInput.MoveLeft,

@@ -15,7 +15,8 @@ SharpCampus は [MagicOnion](https://github.com/Cysharp/MagicOnion) と [Cysharp
 | `src/SharpCampus.GameCore` | ネットワークやホスティングに依存しないゲームルールとシミュレーション。こちらも `netstandard2.1` です。 |
 | `src/SharpCampus.ApiServer` | アカウント、プロフィール、マッチメイキングを担当するメタゲームのホストです。 |
 | `src/SharpCampus.RoomServer` | サーバー権威のティックループを回すリアルタイム対戦ホストです。 |
-| `src/SharpCampus.Server.Common` | 2つのサーバーホストが共有する共通部品です。 |
+| `src/SharpCampus.BotServer` | 待ち行列に相手がいないときに投入するボットのホストです。ボット用アカウントでサインインし、通常のクライアントと同じ経路でプレイします。 |
+| `src/SharpCampus.Server.Common` | 各サーバーホストが共有する共通部品です。 |
 | `src/SharpCampus.Cli` | ゲームをプレイし、サーバーの動作確認にも使う .NET コンソールクライアントです。 |
 | `tools/SharpCampus.MasterDataTool` | ゲームのマスターデータ原本を検証し、デプロイ先のサーバーが読むデータベースファイルを生成するコマンドラインツールです。 |
 | `masterdata/` | マスターデータの原本で、テーブルごとに JSON ファイルが1つずつあります。ゲーム定数、重力カーブ、攻撃・コンボテーブル、コイン報酬とレーティング定数、スキン、ミッションが入っています。 |
@@ -23,6 +24,7 @@ SharpCampus は [MagicOnion](https://github.com/Cysharp/MagicOnion) と [Cysharp
 | `tests/SharpCampus.GameCore.Tests` | `SharpCampus.GameCore` のテスト。 |
 | `tests/SharpCampus.ApiServer.Tests` | `SharpCampus.ApiServer` のテスト。 |
 | `tests/SharpCampus.RoomServer.Tests` | `SharpCampus.RoomServer` のテスト。 |
+| `tests/SharpCampus.BotServer.Tests` | `SharpCampus.BotServer` のテスト。 |
 | `tests/SharpCampus.ServerCommon.Tests` | `SharpCampus.Server.Common` のテスト。 |
 | `tests/SharpCampus.MasterDataTool.Tests` | `SharpCampus.MasterDataTool` のテスト。 |
 | `tests/SharpCampus.LoadTest` | サーバーの負荷テスト用ツール。 |
@@ -94,7 +96,13 @@ dotnet run --project src/SharpCampus.ApiServer
 dotnet run --project src/SharpCampus.RoomServer
 ```
 
-コンソールクライアントから両サーバーを操作します。引数なしで実行すると REPL が起動します。
+さらにもう一つターミナルを開いてボットサーバーも起動します。
+
+```bash
+dotnet run --project src/SharpCampus.BotServer
+```
+
+コンソールクライアントからサーバーを操作します。引数なしで実行すると REPL が起動します。
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -139,6 +147,13 @@ cli> logout
 並んで描かれ、自分のピースはキーボードで操作し、終わると再戦の確認があり、コインとレーティングが両方のプロフィールに
 反映されます。各ボードはその持ち主が装備したスキンで描かれ、相手の画面でも同じです。別々のアカウントでログインした
 クライアント二つから実行すれば、一人でも一試合を通してプレイできます。
+
+ほかに誰も待っていなければ、待っていても相手は現れません。そこで設定した時間（既定は2分、開発設定では15秒）を過ぎると、
+ApiServer がボットサーバーに相手を頼みます。ボットは自分のアカウントでサインインし、クライアントとまったく同じ三つの
+呼び出しで同じ待ち行列に入るので、ボットを席に着かせるのも上で説明したマッチングそのものです。つまり、部屋も入場トークンも
+精算も、相手がボットであることを知りません。ボットは一手先だけを見るヒューリスティックで打ちます。ピースごとに置ける場所を
+すべて採点し、盤面が最も低く平らで、埋まったセルを作らない結果を選び、そこへ至る入力を R3 のストリームで一拍に一つずつ
+送ります。こうすれば部屋がティックごとに受け取る入力の上限に全部が収まります。
 
 `rank` はレーティングランキングの上位 100 位を表示し、自分の行を強調します。100 位より下にいる場合は、区切りの下に
 自分の行を追加します。`rank daily` は同じ形式で、今日（UTC の日付）に精算された勝利数のランキングを読みます。どちらも

@@ -1,9 +1,11 @@
+using Microsoft.Extensions.Options;
 using SharpCampus.Server.Common.Data;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
+using SharpCampus.Shared.Internal.Bots;
 using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Profiles;
@@ -20,15 +22,20 @@ internal sealed class MatchmakingWorker(
     IActiveRoomStore activeRooms,
     IRoomRegistry registry,
     IRoomControlClient roomControl,
+    IBotSummoner bots,
+    IBotSummonCooldown botCooldown,
     EntryTokenService entryTokens,
     IServiceScopeFactory scopes,
     MemoryDatabase masterData,
+    IOptions<BotFallbackOptions> botFallback,
     ILogger<MatchmakingWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan _period = TimeSpan.FromMilliseconds(500);
 
     // What a profile row is created wearing, and so what an account without one is seated in.
     private readonly SkinId _freeSkinId = masterData.SkinTable.FreeSkin.SkinId;
+
+    private readonly TimeSpan _summonAfter = TimeSpan.FromSeconds(botFallback.Value.SummonAfterSeconds);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -62,10 +69,48 @@ internal sealed class MatchmakingWorker(
             while (await queue.PeekPairAsync() is { } pair && await MatchAsync(pair.First, pair.Second))
             {
             }
+
+            await SummonBotAsync();
         }
         finally
         {
             await pairingLock.ReleaseAsync();
+        }
+    }
+
+    // Whoever is left over once every pair has been placed has nobody to be matched with. Past the
+    // threshold the bot server is asked for one, and the bot queues like any other client: this pass
+    // does nothing else for it, and the next one pairs it through the path above.
+    private async Task SummonBotAsync()
+    {
+        if (await queue.PeekLoneAsync() is not { } lone
+            || lone.Waited < _summonAfter
+            || await botCooldown.IsActiveAsync())
+        {
+            return;
+        }
+
+        var waitedSeconds = (int)lone.Waited.TotalSeconds;
+        var outcome = (await bots.SummonAsync())?.Outcome;
+
+        // Every attempt paces the next one, whatever came of it. A bot server that is missing or out of
+        // accounts is a normal state here, and the cooldown is what keeps it to one attempt per window
+        // instead of one per pass, without a failure state of its own to recover from.
+        await botCooldown.StartAsync();
+
+        switch (outcome)
+        {
+            case SummonBotOutcome.Deployed:
+                logger.BotSummoned(lone.UserId, waitedSeconds);
+                break;
+
+            case SummonBotOutcome.Exhausted:
+                logger.BotExhausted(lone.UserId, waitedSeconds);
+                break;
+
+            default:
+                logger.BotSummonFailed(lone.UserId, waitedSeconds);
+                break;
         }
     }
 

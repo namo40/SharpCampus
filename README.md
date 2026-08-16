@@ -15,7 +15,8 @@ Everything from the game servers down to containerized deployment lives in this 
 | `src/SharpCampus.GameCore` | Game rules and simulation, free of networking and hosting concerns. Also `netstandard2.1`. |
 | `src/SharpCampus.ApiServer` | Meta-game host: accounts, profiles, and matchmaking. |
 | `src/SharpCampus.RoomServer` | Real-time match host running the server-authoritative tick loop. |
-| `src/SharpCampus.Server.Common` | Building blocks shared by both server hosts. |
+| `src/SharpCampus.BotServer` | Fallback bot host: signs bots in and plays them through the ordinary client path. |
+| `src/SharpCampus.Server.Common` | Building blocks shared by the server hosts. |
 | `src/SharpCampus.Cli` | .NET console client used to play the game and to exercise the servers. |
 | `tools/SharpCampus.MasterDataTool` | Command-line tool that validates the game master data sources and builds the database a deployed server loads. |
 | `masterdata/` | Master data sources, one JSON file per table: game constants, gravity curve, attack and combo tables, coin payouts and rating constants, skins and missions. |
@@ -23,6 +24,7 @@ Everything from the game servers down to containerized deployment lives in this 
 | `tests/SharpCampus.GameCore.Tests` | Tests for `SharpCampus.GameCore`. |
 | `tests/SharpCampus.ApiServer.Tests` | Tests for `SharpCampus.ApiServer`. |
 | `tests/SharpCampus.RoomServer.Tests` | Tests for `SharpCampus.RoomServer`. |
+| `tests/SharpCampus.BotServer.Tests` | Tests for `SharpCampus.BotServer`. |
 | `tests/SharpCampus.ServerCommon.Tests` | Tests for `SharpCampus.Server.Common`. |
 | `tests/SharpCampus.MasterDataTool.Tests` | Tests for `SharpCampus.MasterDataTool`. |
 | `tests/SharpCampus.LoadTest` | Load-testing harness for the servers. |
@@ -95,6 +97,12 @@ and the match server, in a second terminal:
 dotnet run --project src/SharpCampus.RoomServer
 ```
 
+and the bot server, in a third:
+
+```bash
+dotnet run --project src/SharpCampus.BotServer
+```
+
 Then drive them from the console client, which starts a REPL when you pass no arguments:
 
 ```bash
@@ -142,6 +150,15 @@ live in the console: both boards side by side, your pieces under keyboard contro
 when it ends, and coins and rating settled to both profiles. Each board is drawn in its owner's
 equipped skin, on both screens. Run it from two clients signed in as different accounts to play
 against yourself.
+
+With nobody else queueing there would be nothing to wait for. Past a configured wait — two minutes,
+and fifteen seconds under the development settings — the ApiServer asks the bot server for an
+opponent. The bot signs in to an account of its own and joins the same queue through the same three
+calls a client makes, so the pairing pass that seats it is the one above, unchanged: nothing about
+rooms, entry tokens or settlement knows a bot is involved. It plays a one-move heuristic — for each
+piece it scores every drop that piece can reach, takes the one leaving the board lowest, flattest
+and free of buried cells, and streams the inputs that get there through R3, one per beat so the
+room's per-tick input allowance takes all of them.
 
 `rank` lists the first hundred places of the rating board with your own row highlighted, and adds it
 under a break when you sit further down than the hundredth. `rank daily` reads the same board for the

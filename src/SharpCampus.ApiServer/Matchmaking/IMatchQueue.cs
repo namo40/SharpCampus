@@ -15,4 +15,8 @@ public interface IMatchQueue
     // Reads the two longest-waiting accounts without taking them out, so a player stays visibly queued
     // until the ticket that replaces that answer has been stored. Null when fewer than two are waiting.
     Task<(UserId First, UserId Second)?> PeekPairAsync();
+
+    // The one account left over once every pair has been placed, with how long it has been waiting.
+    // Null unless exactly one is waiting, because anything else still has a partner in reach.
+    Task<(UserId UserId, TimeSpan Waited)?> PeekLoneAsync();
 }

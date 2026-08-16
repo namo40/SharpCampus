@@ -25,4 +25,13 @@ internal static partial class MatchmakingLog
         string outcome,
         UserId first,
         UserId second);
+
+    [ZLoggerMessage(LogLevel.Information, "Summoned a bot for {userId}, alone in the queue for {waitedSeconds}s")]
+    public static partial void BotSummoned(this ILogger logger, UserId userId, int waitedSeconds);
+
+    [ZLoggerMessage(LogLevel.Warning, "No bot left for {userId}, alone in the queue for {waitedSeconds}s")]
+    public static partial void BotExhausted(this ILogger logger, UserId userId, int waitedSeconds);
+
+    [ZLoggerMessage(LogLevel.Warning, "Bot server unreachable for {userId}, alone in the queue for {waitedSeconds}s")]
+    public static partial void BotSummonFailed(this ILogger logger, UserId userId, int waitedSeconds);
 }

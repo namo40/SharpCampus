@@ -11,6 +11,7 @@ using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Server.Common.Security;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Identity;
+using SharpCampus.Shared.Internal.Bots;
 using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Profiles;
@@ -21,6 +22,8 @@ namespace SharpCampus.ApiServer.Tests;
 
 public class MatchmakingWorkerTests
 {
+    private const int SummonAfterSeconds = 30;
+
     private static readonly UserId _first = new(Guid.NewGuid());
     private static readonly UserId _second = new(Guid.NewGuid());
     private static readonly UserId _third = new(Guid.NewGuid());
@@ -41,6 +44,8 @@ public class MatchmakingWorkerTests
     private readonly IActiveRoomStore _activeRooms = Substitute.For<IActiveRoomStore>();
     private readonly IRoomRegistry _registry = Substitute.For<IRoomRegistry>();
     private readonly IRoomControlClient _roomControl = Substitute.For<IRoomControlClient>();
+    private readonly IBotSummoner _bots = Substitute.For<IBotSummoner>();
+    private readonly IBotSummonCooldown _botCooldown = Substitute.For<IBotSummonCooldown>();
     private readonly IProfileRepository _profiles = Substitute.For<IProfileRepository>();
     private readonly List<UserId> _waiting = [];
 
@@ -49,6 +54,7 @@ public class MatchmakingWorkerTests
         _pairingLock.TryAcquireAsync().Returns(true);
         _registry.FindLeastLoadedAsync().Returns(_server);
         _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>()).Returns(CreateRoomResult.Created);
+        _bots.SummonAsync().Returns(SummonBotResult.Deployed);
         _profiles.GetAsync(_first).Returns(new Profile(_first, "alpha") { EquippedSkinId = _mono });
         _profiles.GetAsync(_second).Returns(new Profile(_second, "beta") { EquippedSkinId = _classic });
 
@@ -228,7 +234,84 @@ public class MatchmakingWorkerTests
         await _pairingLock.Received(1).ReleaseAsync();
     }
 
+    [Fact]
+    public async Task LonePlayerWhoHasNotWaitedLongEnough_IsLeftToTheQueue()
+    {
+        LoneEntry(_first, TimeSpan.FromSeconds(SummonAfterSeconds - 1));
+
+        await CreateWorker().PairAsync();
+
+        await _bots.DidNotReceive().SummonAsync();
+    }
+
+    [Fact]
+    public async Task LonePlayerPastTheThreshold_DrawsABotAndStartsTheCooldown()
+    {
+        LoneEntry(_first, TimeSpan.FromSeconds(SummonAfterSeconds + 1));
+
+        await CreateWorker().PairAsync();
+
+        await _bots.Received(1).SummonAsync();
+        await _botCooldown.Received(1).StartAsync();
+    }
+
+    [Fact]
+    public async Task PlayersWhoStillHaveEachOther_DrawNoBot()
+    {
+        // Two waiting accounts are a pair the pass has already had its chance at, so the queue reports
+        // no lone entry at all.
+        QueueHolds(_first, _second);
+        _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>())
+            .Returns(new CreateRoomResult(CreateRoomOutcome.AtCapacity));
+
+        await CreateWorker().PairAsync();
+
+        await _bots.DidNotReceive().SummonAsync();
+    }
+
+    [Fact]
+    public async Task BotThatIsAlreadyOnItsWay_IsNotSentForAgain()
+    {
+        LoneEntry(_first, TimeSpan.FromSeconds(SummonAfterSeconds + 1));
+        _botCooldown.IsActiveAsync().Returns(true);
+
+        await CreateWorker().PairAsync();
+
+        await _bots.DidNotReceive().SummonAsync();
+    }
+
+    [Fact]
+    public async Task BotServerThatIsNotRunning_StartsTheCooldownAllTheSame()
+    {
+        LoneEntry(_first, TimeSpan.FromSeconds(SummonAfterSeconds + 1));
+        _bots.SummonAsync().Returns((SummonBotResult?)null);
+
+        await CreateWorker().PairAsync();
+
+        // A bot server is optional, so the passes that follow stay quiet instead of asking for one every
+        // half second. The pass itself finished all the same: a queue with nobody to pair still works.
+        await _bots.Received(1).SummonAsync();
+        await _botCooldown.Received(1).StartAsync();
+    }
+
+    [Fact]
+    public async Task BotServerWithNoAccountLeft_StartsTheCooldownAllTheSame()
+    {
+        LoneEntry(_first, TimeSpan.FromSeconds(SummonAfterSeconds + 1));
+        _bots.SummonAsync().Returns(SummonBotResult.Exhausted);
+
+        await CreateWorker().PairAsync();
+
+        await _botCooldown.Received(1).StartAsync();
+    }
+
     private void QueueHolds(params UserId[] waiting) => _waiting.AddRange(waiting);
+
+    private void LoneEntry(UserId userId, TimeSpan waited)
+    {
+        QueueHolds(userId);
+        _queue.PeekLoneAsync().Returns((userId, waited));
+    }
 
     private IEnumerable<(UserId UserId, MatchTicket Ticket)> StoredTickets() => _tickets.ReceivedCalls()
         .Where(call => call.GetMethodInfo().Name == nameof(ITicketStore.StoreAsync))
@@ -255,9 +338,12 @@ public class MatchmakingWorkerTests
             _activeRooms,
             _registry,
             _roomControl,
+            _bots,
+            _botCooldown,
             EntryTokens(),
             scopes,
             _masterData,
+            Options.Create(new BotFallbackOptions { SummonAfterSeconds = SummonAfterSeconds }),
             NullLogger<MatchmakingWorker>.Instance);
     }
 }
