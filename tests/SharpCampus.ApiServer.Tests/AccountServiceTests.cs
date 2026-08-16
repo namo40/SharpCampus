@@ -28,6 +28,18 @@ public sealed class AccountServiceTests(SupabaseTestFactory factory) : IClassFix
     }
 
     [Fact]
+    public async Task GetMyIdentityAsync_WithAnAnonymousToken_ReportsNoAddress()
+    {
+        var userId = Guid.NewGuid();
+        var client = CreateClient(factory.CreateAnonymousToken(userId));
+
+        var identity = await client.GetMyIdentityAsync();
+
+        Assert.Equal(new UserId(userId), identity.UserId);
+        Assert.Equal(string.Empty, identity.Email);
+    }
+
+    [Fact]
     public async Task GetMyIdentityAsync_WithoutAToken_IsRejected()
     {
         var client = CreateClient(token: null);
@@ -84,6 +96,25 @@ public sealed class AccountServiceTests(SupabaseTestFactory factory) : IClassFix
         Assert.Equal("boardsweeper", profile.Nickname);
         Assert.Equal(new Coins(120), profile.Coins);
         Assert.Equal(new Rating(1180), profile.Rating);
+    }
+
+    [Fact]
+    public async Task GetMyProfileAsync_WithAnAnonymousToken_CreatesTheProfile()
+    {
+        var userId = Guid.NewGuid();
+        var profiles = Substitute.For<IProfileRepository>();
+        profiles.GetAsync(new UserId(userId)).Returns(Stored(userId, "player_0123abcd"));
+
+        var client = _client.Create<IAccountService>(
+            factory.WithProfiles(profiles),
+            factory.CreateAnonymousToken(userId));
+
+        var profile = await client.GetMyProfileAsync();
+
+        await profiles.Received(1).CreateIfAbsentAsync(
+            new UserId(userId),
+            Arg.Is<string>(nickname => nickname.StartsWith(NicknameRules.InitialPrefix) && NicknameRules.IsValid(nickname)));
+        Assert.Equal(new UserId(userId), profile.UserId);
     }
 
     [Fact]

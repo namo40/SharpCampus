@@ -1,13 +1,13 @@
 using Cysharp.Text;
-using SharpCampus.Cli.Resources;
+using SharpCampus.Client.Common.Resources;
 using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
 
-namespace SharpCampus.Cli.Duel;
+namespace SharpCampus.Client.Common.Duel;
 
 // Owns the console for the length of a match: one task redraws the frame, one flushes queued inputs
 // to the room, and one reads the keyboard.
-internal sealed class DuelSession(IDuelHub hub, DuelReceiver receiver, DuelRenderer renderer, bool autoPlay)
+public sealed class DuelSession(IDuelHub hub, DuelReceiver receiver, DuelRenderer renderer, bool autoPlay)
 {
     private const string CursorHome = "\u001b[H";
     private const string ClearScreen = "\u001b[2J\u001b[H";

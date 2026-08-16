@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using SharpCampus.GameCore;
 
-namespace SharpCampus.Cli.Duel;
+namespace SharpCampus.Client.Common.Duel;
 
 // A console delivers key presses but never key releases, so soft drop is released on a gap in the
 // OS auto-repeat. DAS and ARR are that same auto-repeat: one delivered key is one command.

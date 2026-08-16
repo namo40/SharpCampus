@@ -17,7 +17,9 @@ Everything from the game servers down to containerized deployment lives in this 
 | `src/SharpCampus.RoomServer` | Real-time match host running the server-authoritative tick loop. |
 | `src/SharpCampus.BotServer` | Fallback bot host: signs bots in and plays them through the ordinary client path. |
 | `src/SharpCampus.Server.Common` | Building blocks shared by the server hosts. |
-| `src/SharpCampus.Cli` | .NET console client used to play the game and to exercise the servers. |
+| `src/SharpCampus.Client` | .NET console client the game is played in: a fullscreen, menu-driven terminal UI. |
+| `src/SharpCampus.Cli` | .NET console client that exercises the servers, one command per service call. |
+| `src/SharpCampus.Client.Common` | Sign-in, session storage, localization and duel rendering, shared by both clients. |
 | `tools/SharpCampus.MasterDataTool` | Command-line tool that validates the game master data sources and builds the database a deployed server loads. |
 | `masterdata/` | Master data sources, one JSON file per table: game constants, gravity curve, attack and combo tables, coin payouts and rating constants, skins and missions. |
 | `tests/SharpCampus.Shared.Tests` | Tests for `SharpCampus.Shared`. |
@@ -125,7 +127,9 @@ want the meta-game server, the match server, the Supabase stack and Redis up, an
 stopped, so that no fallback opponent joins what you are measuring. The accounts the harness plays as
 (`loadtest<N>@sharpcampus.dev`) are signed up on first use, as the bots' own are.
 
-Then drive them from the console client, which starts a REPL when you pass no arguments:
+Two console clients connect to them: `src/SharpCampus.Client` is the game, and `src/SharpCampus.Cli`
+is a REPL that walks the server API one command per call. The REPL comes first here, because every
+call the game makes is a command in it. It starts when you pass no arguments:
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -134,6 +138,8 @@ dotnet run --project src/SharpCampus.Cli
 ```text
 cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
+cli> guest
+cli> link player@example.com hunter2
 cli> whoami
 cli> nickname boardsweeper
 cli> skins
@@ -142,6 +148,7 @@ cli> equip mono
 cli> missions
 cli> claim win_1
 cli> duel
+cli> history
 cli> rank
 cli> rank daily
 cli> logout
@@ -153,6 +160,12 @@ player profile — nickname, coins, rating and equipped skin. The first `whoami`
 derived from the account id. `nickname` renames it: 2 to 16 letters, digits or underscores, unique across accounts
 and compared case-insensitively. Every command also works as a one-shot invocation, for example
 `dotnet run --project src/SharpCampus.Cli -- whoami`.
+
+`guest` is the way in without an email: Supabase signs the client in anonymously, and the account
+behind it plays, earns and ranks like any other. `link` makes that same account permanent by
+attaching an email and a password to it — the user id never changes, so the coins, rating and match
+history a guest ran up carry over untouched. Both local stacks have anonymous sign-ins switched on
+for it, in `supabase/config.toml` and in the cluster's GoTrue manifest.
 
 `skins` lists the six cosmetic board themes with their coin prices, what you already own and what you
 are wearing. `buy` spends match winnings on one — the balance check, the coin debit and the ownership
@@ -182,12 +195,37 @@ piece it scores every drop that piece can reach, takes the one leaving the board
 and free of buried cells, and streams the inputs that get there through R3, one per beat so the
 room's per-tick input allowance takes all of them.
 
+`history` reads your recent matches back, newest first: who you played, how it ended and what it
+moved your rating and coins by. `IMatchHistoryService` on the meta-game server answers it from the
+settled matches Postgres already holds, scoped to the caller, so a match shows up there as soon as
+settlement writes it.
+
 `rank` lists the first hundred places of the rating board with your own row highlighted, and adds it
 under a break when you sit further down than the hundredth. `rank daily` reads the same board for the
 wins settled today, by UTC date. Both are Redis sorted sets the room server writes to as each match
 settles — Postgres stays the source of truth, so a push that never lands leaves a board to rebuild
 rather than a payout to recover. The daily board carries its date in the key and expires on its own,
 which is the whole of the daily reset.
+
+The game itself is the other client, and there is nothing to type in it: it takes the whole terminal
+and runs on the arrow keys and Enter from the title screen on.
+
+```bash
+dotnet run --project src/SharpCampus.Client
+```
+
+It opens on Log in, Sign up, Play as guest and Exit, then settles into a lobby that carries your
+nickname, coins, rating and equipped skin above a menu of Play a duel, Shop, Missions, Rankings,
+Match history, Account and Exit. Playing a duel queues you up — Esc leaves the queue while you are
+still waiting — and hands the whole screen to the board renderer the REPL's `duel` draws, under the
+same keys; the result and the rematch offer follow the match, and answering it either way returns
+you to the lobby. It wants a terminal to itself: with input or output redirected it prints a notice
+and exits.
+
+Underneath they are one client. `src/SharpCampus.Client.Common` holds the sign-in, the session file,
+the localized strings and the duel rendering stack, so a match plays out identically whichever one
+you started it from, and both take the same `--lang en|ko|ja` option and read the same
+`SHARPCAMPUS_SERVER` variable for the server address.
 
 Stop the stack with `supabase stop` and the Redis container with `docker rm -f sharpcampus-redis` when
 you are done.

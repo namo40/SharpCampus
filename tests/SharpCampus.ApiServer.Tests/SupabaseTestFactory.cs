@@ -30,6 +30,10 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
     public string CreateToken(Guid userId, string email) =>
         CreateToken(userId, email, DateTime.UtcNow.AddMinutes(5), _signingAlgorithm);
 
+    // What GoTrue issues for an anonymous sign-in: the address claim is present but carries nothing.
+    public string CreateAnonymousToken(Guid userId) =>
+        CreateToken(userId, string.Empty, DateTime.UtcNow.AddMinutes(5), _signingAlgorithm, isAnonymous: true);
+
     public string CreateExpiredToken(Guid userId, string email) =>
         // Well past the 5 minute clock skew that token validation allows by default.
         CreateToken(userId, email, DateTime.UtcNow.AddMinutes(-30), _signingAlgorithm);
@@ -58,6 +62,16 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
             {
                 services.AddScoped(_ => profiles);
                 services.AddScoped(_ => missions);
+            }));
+
+    // A history is the caller's own rows plus the names of whoever sat across from them, so the two
+    // stores that answer those are doubled together.
+    public WebApplicationFactory<Program> WithMatchHistory(IProfileRepository profiles, IMatchHistoryRepository history) =>
+        WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddScoped(_ => profiles);
+                services.AddScoped(_ => history);
             }));
 
     // The places come from Redis and the names beside them from the profile store, the cache decides
@@ -113,7 +127,12 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
         }
     }
 
-    private static string CreateToken(Guid userId, string email, DateTime expires, ECDsa algorithm) =>
+    private static string CreateToken(
+        Guid userId,
+        string email,
+        DateTime expires,
+        ECDsa algorithm,
+        bool isAnonymous = false) =>
         new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = Issuer,
@@ -123,6 +142,7 @@ public sealed class SupabaseTestFactory : WebApplicationFactory<Program>
             {
                 [JwtRegisteredClaimNames.Sub] = userId.ToString(),
                 [JwtRegisteredClaimNames.Email] = email,
+                ["is_anonymous"] = isAnonymous,
             },
             SigningCredentials = new SigningCredentials(new ECDsaSecurityKey(algorithm), SecurityAlgorithms.EcdsaSha256),
         });

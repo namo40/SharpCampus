@@ -1,15 +1,15 @@
 using Cysharp.Text;
-using SharpCampus.Cli.Resources;
+using SharpCampus.Client.Common.Resources;
 using SharpCampus.GameCore;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.MasterData;
 
-namespace SharpCampus.Cli.Duel;
+namespace SharpCampus.Client.Common.Duel;
 
 // One frame is assembled in full and written once over the previous one, so nothing is ever drawn
 // cell by cell and the two boards on screen always belong to the same tick. Each board is drawn in
 // its own owner's skin, so a bought skin is something the opponent sees too.
-internal sealed class DuelRenderer(int seat, string[] displayNames, Skin[] skins, DuelStatus status)
+public sealed class DuelRenderer(int seat, string[] displayNames, Skin[] skins, DuelStatus status)
 {
     public const int MinimumWidth = 80;
     public const int MinimumHeight = 26;

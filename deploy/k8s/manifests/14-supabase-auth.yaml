@@ -101,6 +101,9 @@ spec:
               value: "true"
             - name: GOTRUE_DISABLE_SIGNUP
               value: "false"
+            # Lets a player start a match before there is an address to attach to the account.
+            - name: GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED
+              value: "true"
             # Only ever the base of a redirect back to a browser, which no console client asks for.
             - name: GOTRUE_SITE_URL
               value: http://localhost

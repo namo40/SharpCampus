@@ -1,8 +1,8 @@
-namespace SharpCampus.Cli.Duel;
+namespace SharpCampus.Client.Common.Duel;
 
 // Connection facts the boards do not carry. Written by the hub's receive loop and its heartbeat
 // callback, read by the render loop, so every field crosses a thread boundary on its own.
-internal sealed class DuelStatus
+public sealed class DuelStatus
 {
     private readonly int[] _connected = [1, 1];
 

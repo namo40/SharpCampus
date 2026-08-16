@@ -1,6 +1,6 @@
-namespace SharpCampus.Cli;
+namespace SharpCampus.Client.Common;
 
-internal static class ClientEndpoints
+public static class ClientEndpoints
 {
     // In the deployed shape every call goes through the single entry point, so where the servers are is
     // something the environment says rather than something this build carries.

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AccountEmailLabel" xml:space="preserve">
+    <value>이메일</value>
+  </data>
+  <data name="AccountTitle" xml:space="preserve">
+    <value>계정</value>
+  </data>
+  <data name="AccountUserIdLabel" xml:space="preserve">
+    <value>계정 ID</value>
+  </data>
+  <data name="AppTagline" xml:space="preserve">
+    <value>MagicOnion으로 즐기는 1:1 낙하 블록 대전.</value>
+  </data>
+  <data name="DuelTitle" xml:space="preserve">
+    <value>대전</value>
+  </data>
+  <data name="GuestHint" xml:space="preserve">
+    <value>게스트 계정입니다. 이메일을 연결하면 계속 사용할 수 있습니다.</value>
+  </data>
+  <data name="InteractiveTerminalRequired" xml:space="preserve">
+    <value>SharpCampus는 대화형 터미널이 필요합니다. 콘솔 창에서 실행하세요.</value>
+  </data>
+  <data name="LobbyTitle" xml:space="preserve">
+    <value>로비</value>
+  </data>
+  <data name="MenuAccount" xml:space="preserve">
+    <value>계정</value>
+  </data>
+  <data name="MenuBack" xml:space="preserve">
+    <value>뒤로</value>
+  </data>
+  <data name="MenuBuy" xml:space="preserve">
+    <value>구매</value>
+  </data>
+  <data name="MenuChangeNickname" xml:space="preserve">
+    <value>닉네임 변경</value>
+  </data>
+  <data name="MenuDuel" xml:space="preserve">
+    <value>대전 시작</value>
+  </data>
+  <data name="MenuEquip" xml:space="preserve">
+    <value>장착</value>
+  </data>
+  <data name="MenuExit" xml:space="preserve">
+    <value>종료</value>
+  </data>
+  <data name="MenuHistory" xml:space="preserve">
+    <value>대전 기록</value>
+  </data>
+  <data name="MenuLinkAccount" xml:space="preserve">
+    <value>이메일 연결</value>
+  </data>
+  <data name="MenuLogIn" xml:space="preserve">
+    <value>로그인</value>
+  </data>
+  <data name="MenuLogOut" xml:space="preserve">
+    <value>로그아웃</value>
+  </data>
+  <data name="MenuMissions" xml:space="preserve">
+    <value>미션</value>
+  </data>
+  <data name="MenuPlayAsGuest" xml:space="preserve">
+    <value>게스트로 플레이</value>
+  </data>
+  <data name="MenuPrompt" xml:space="preserve">
+    <value>무엇을 할까요?</value>
+  </data>
+  <data name="MenuRankings" xml:space="preserve">
+    <value>순위</value>
+  </data>
+  <data name="MenuRetry" xml:space="preserve">
+    <value>다시 시도</value>
+  </data>
+  <data name="MenuShop" xml:space="preserve">
+    <value>상점</value>
+  </data>
+  <data name="MenuSignUp" xml:space="preserve">
+    <value>회원가입</value>
+  </data>
+  <data name="MissionSelect" xml:space="preserve">
+    <value>보상을 받을 미션을 고르세요</value>
+  </data>
+  <data name="MissionsTitle" xml:space="preserve">
+    <value>미션</value>
+  </data>
+  <data name="PressAnyKey" xml:space="preserve">
+    <value>아무 키나 누르면 계속합니다.</value>
+  </data>
+  <data name="PromptEmail" xml:space="preserve">
+    <value>이메일</value>
+  </data>
+  <data name="PromptNickname" xml:space="preserve">
+    <value>새 닉네임</value>
+  </data>
+  <data name="PromptPassword" xml:space="preserve">
+    <value>비밀번호</value>
+  </data>
+  <data name="QueueCancelHint" xml:space="preserve">
+    <value>Esc를 누르면 대기열에서 나갑니다.</value>
+  </data>
+  <data name="RankSelectBoard" xml:space="preserve">
+    <value>순위표를 고르세요</value>
+  </data>
+  <data name="RankingsTitle" xml:space="preserve">
+    <value>순위</value>
+  </data>
+  <data name="SessionEndedNotice" xml:space="preserve">
+    <value>세션이 더 이상 유효하지 않습니다. 로그아웃합니다.</value>
+  </data>
+  <data name="ShopActionTitle" xml:space="preserve">
+    <value>{0}(으)로 무엇을 할까요?</value>
+  </data>
+  <data name="ShopSelectSkin" xml:space="preserve">
+    <value>스킨을 고르세요</value>
+  </data>
+  <data name="ShopTitle" xml:space="preserve">
+    <value>상점</value>
+  </data>
+  <data name="ShopWearing" xml:space="preserve">
+    <value>이미 {0}을(를) 장착하고 있습니다.</value>
+  </data>
+  <data name="TitleMenuTitle" xml:space="preserve">
+    <value>어떻게 플레이할까요?</value>
+  </data>
+</root>

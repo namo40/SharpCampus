@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "SharpCampus.Client": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false
+    },
+    "SharpCampus.Client (entry point)": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "environmentVariables": {
+        "SHARPCAMPUS_SERVER": "http://localhost:5000"
+      }
+    }
+  }
+}

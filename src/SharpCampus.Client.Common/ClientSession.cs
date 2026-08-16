@@ -1,10 +1,16 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
-namespace SharpCampus.Cli;
+namespace SharpCampus.Client.Common;
 
 // Survives process exit so one-shot invocations and the REPL share the same signed-in user.
-internal sealed record ClientSession(string AccessToken, string Email)
+// A guest has no address yet, which is the only thing that separates the two kinds of session.
+public sealed record ClientSession(string AccessToken, string? Email)
 {
+    // Derived from the address, so the stored file keeps the two fields it always had.
+    [JsonIgnore]
+    public bool IsGuest => Email is null;
+
     private static readonly string _filePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "SharpCampus",

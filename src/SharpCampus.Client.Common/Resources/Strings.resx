@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AlreadyFullAccount" xml:space="preserve">
+    <value>Already a full account ({0}). Nothing to link.</value>
+  </data>
+  <data name="BoardHeaderRival" xml:space="preserve">
+    <value>RIVAL</value>
+  </data>
+  <data name="BoardHeaderYou" xml:space="preserve">
+    <value>YOU</value>
+  </data>
+  <data name="GuestLabel" xml:space="preserve">
+    <value>(guest)</value>
+  </data>
+  <data name="GuestSignedUp" xml:space="preserve">
+    <value>Playing as a guest. Run: link &lt;email&gt; &lt;password&gt; to keep this account.</value>
+  </data>
+  <data name="HistoryColumnCoins" xml:space="preserve">
+    <value>Coins</value>
+  </data>
+  <data name="HistoryColumnDate" xml:space="preserve">
+    <value>Played</value>
+  </data>
+  <data name="HistoryColumnOpponent" xml:space="preserve">
+    <value>Opponent</value>
+  </data>
+  <data name="HistoryColumnRating" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="HistoryColumnReason" xml:space="preserve">
+    <value>Ended by</value>
+  </data>
+  <data name="HistoryColumnResult" xml:space="preserve">
+    <value>Result</value>
+  </data>
+  <data name="HistoryEmpty" xml:space="preserve">
+    <value>You have not finished a match yet.</value>
+  </data>
+  <data name="HistoryHeader" xml:space="preserve">
+    <value>Your recent matches, newest first</value>
+  </data>
+  <data name="HistoryOutcomeDraw" xml:space="preserve">
+    <value>Draw</value>
+  </data>
+  <data name="HistoryOutcomeLoss" xml:space="preserve">
+    <value>Loss</value>
+  </data>
+  <data name="HistoryOutcomeWin" xml:space="preserve">
+    <value>Win</value>
+  </data>
+  <data name="HistoryUnknownOpponent" xml:space="preserve">
+    <value>(unknown)</value>
+  </data>
+  <data name="HudCombo" xml:space="preserve">
+    <value>COMBO</value>
+  </data>
+  <data name="HudGarbage" xml:space="preserve">
+    <value>GARBAGE</value>
+  </data>
+  <data name="HudHold" xml:space="preserve">
+    <value>HOLD</value>
+  </data>
+  <data name="HudLevel" xml:space="preserve">
+    <value>LV</value>
+  </data>
+  <data name="HudNext" xml:space="preserve">
+    <value>NEXT</value>
+  </data>
+  <data name="HudPing" xml:space="preserve">
+    <value>PING</value>
+  </data>
+  <data name="KeyMap" xml:space="preserve">
+    <value>Move ←/→   Soft drop ↓   Rotate Z/X   Hard drop Space   Hold C   Forfeit Q</value>
+  </data>
+  <data name="Linked" xml:space="preserve">
+    <value>Guest account linked to {0}. Log in with this address from now on.</value>
+  </data>
+  <data name="LinkFailed" xml:space="preserve">
+    <value>Linking failed: {0}</value>
+  </data>
+  <data name="LoggedIn" xml:space="preserve">
+    <value>Logged in as {0}.</value>
+  </data>
+  <data name="LoggedOut" xml:space="preserve">
+    <value>Logged out.</value>
+  </data>
+  <data name="LoginFailed" xml:space="preserve">
+    <value>Login failed: {0}</value>
+  </data>
+  <data name="MatchResumed" xml:space="preserve">
+    <value>Rejoined the match already in progress.</value>
+  </data>
+  <data name="Matched" xml:space="preserve">
+    <value>Matched into {0} on {1}.</value>
+  </data>
+  <data name="MissionAlreadyClaimed" xml:space="preserve">
+    <value>{0} has already paid out today.</value>
+  </data>
+  <data name="MissionClaimed" xml:space="preserve">
+    <value>Claimed the reward for {0}.</value>
+  </data>
+  <data name="MissionColumnMission" xml:space="preserve">
+    <value>Mission</value>
+  </data>
+  <data name="MissionColumnProgress" xml:space="preserve">
+    <value>Progress</value>
+  </data>
+  <data name="MissionColumnReward" xml:space="preserve">
+    <value>Reward</value>
+  </data>
+  <data name="MissionColumnStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="MissionNotCompleted" xml:space="preserve">
+    <value>{0} is not finished yet.</value>
+  </data>
+  <data name="MissionStatusClaimable" xml:space="preserve">
+    <value>claimable</value>
+  </data>
+  <data name="MissionStatusClaimed" xml:space="preserve">
+    <value>claimed</value>
+  </data>
+  <data name="MissionStatusInProgress" xml:space="preserve">
+    <value>in progress</value>
+  </data>
+  <data name="MissionUnknown" xml:space="preserve">
+    <value>There is no mission called {0}.</value>
+  </data>
+  <data name="MissionsHeader" xml:space="preserve">
+    <value>Today's missions, by UTC date</value>
+  </data>
+  <data name="NicknameRejected" xml:space="preserve">
+    <value>The server rejected {0}.</value>
+  </data>
+  <data name="NicknameRule" xml:space="preserve">
+    <value>Nicknames are {0} to {1} letters, digits or underscores.</value>
+  </data>
+  <data name="NicknameTaken" xml:space="preserve">
+    <value>{0} is already taken.</value>
+  </data>
+  <data name="NicknameUpdated" xml:space="preserve">
+    <value>Nickname is now {0}.</value>
+  </data>
+  <data name="NotLoggedIn" xml:space="preserve">
+    <value>Not logged in. Run: login &lt;email&gt; &lt;password&gt;</value>
+  </data>
+  <data name="NotLoggedInShort" xml:space="preserve">
+    <value>Not logged in.</value>
+  </data>
+  <data name="OpponentDisconnected" xml:space="preserve">
+    <value>Opponent disconnected</value>
+  </data>
+  <data name="OpponentNeverArrived" xml:space="preserve">
+    <value>The opponent never arrived.</value>
+  </data>
+  <data name="ProfileSummary" xml:space="preserve">
+    <value>{0} coins, rating {1}, skin {2}</value>
+  </data>
+  <data name="Queued" xml:space="preserve">
+    <value>Queued. Waiting for an opponent...</value>
+  </data>
+  <data name="QueueLeft" xml:space="preserve">
+    <value>Left the queue.</value>
+  </data>
+  <data name="QueueReleased" xml:space="preserve">
+    <value>The queue let you go without a match. Try again.</value>
+  </data>
+  <data name="RankColumnPlayer" xml:space="preserve">
+    <value>Player</value>
+  </data>
+  <data name="RankColumnRank" xml:space="preserve">
+    <value>Rank</value>
+  </data>
+  <data name="RankColumnRating" xml:space="preserve">
+    <value>Rating</value>
+  </data>
+  <data name="RankColumnWins" xml:space="preserve">
+    <value>Wins</value>
+  </data>
+  <data name="RankEmpty" xml:space="preserve">
+    <value>Nobody has reached this board yet.</value>
+  </data>
+  <data name="RankTitleDaily" xml:space="preserve">
+    <value>Today's wins, by UTC date</value>
+  </data>
+  <data name="RankTitleRating" xml:space="preserve">
+    <value>Rating board</value>
+  </data>
+  <data name="RankUnranked" xml:space="preserve">
+    <value>You are not on this board yet.</value>
+  </data>
+  <data name="ReasonAborted" xml:space="preserve">
+    <value>abandoned</value>
+  </data>
+  <data name="ReasonDisconnect" xml:space="preserve">
+    <value>disconnect</value>
+  </data>
+  <data name="ReasonForfeit" xml:space="preserve">
+    <value>forfeit</value>
+  </data>
+  <data name="ReasonTopOut" xml:space="preserve">
+    <value>top out</value>
+  </data>
+  <data name="RematchDeclined" xml:space="preserve">
+    <value>No rematch. Leaving the room.</value>
+  </data>
+  <data name="RematchNoAnswer" xml:space="preserve">
+    <value>No answer given. Waiting for the room to close the offer...</value>
+  </data>
+  <data name="RematchPrompt" xml:space="preserve">
+    <value>Rematch? [Y/N] {0}s</value>
+  </data>
+  <data name="RematchWaiting" xml:space="preserve">
+    <value>Waiting for the opponent's answer...</value>
+  </data>
+  <data name="ReplicaStats" xml:space="preserve">
+    <value>Replica tick {0}, missed ticks: {1}</value>
+  </data>
+  <data name="ResultAbandoned" xml:space="preserve">
+    <value>Match abandoned</value>
+  </data>
+  <data name="ResultDraw" xml:space="preserve">
+    <value>Draw</value>
+  </data>
+  <data name="ResultLose" xml:space="preserve">
+    <value>You lose</value>
+  </data>
+  <data name="ResultWin" xml:space="preserve">
+    <value>You win</value>
+  </data>
+  <data name="Seated" xml:space="preserve">
+    <value>Seated as player {0}.</value>
+  </data>
+  <data name="SeatRejected" xml:space="preserve">
+    <value>Room {0} would not seat you.</value>
+  </data>
+  <data name="ServerUnreachable" xml:space="preserve">
+    <value>{0}: unreachable at {1}</value>
+  </data>
+  <data name="ServerUnreachableDetail" xml:space="preserve">
+    <value>Server unreachable: {0}</value>
+  </data>
+  <data name="ServerVersionLine" xml:space="preserve">
+    <value>{0} (UTC {1:O})</value>
+  </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Session expired or invalid. Run: login &lt;email&gt; &lt;password&gt;</value>
+  </data>
+  <data name="ShopAlreadyOwned" xml:space="preserve">
+    <value>You already own {0}.</value>
+  </data>
+  <data name="ShopBalance" xml:space="preserve">
+    <value>Balance: {0} coins</value>
+  </data>
+  <data name="ShopColumnPrice" xml:space="preserve">
+    <value>Price</value>
+  </data>
+  <data name="ShopColumnSkin" xml:space="preserve">
+    <value>Skin</value>
+  </data>
+  <data name="ShopColumnStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="ShopEquipped" xml:space="preserve">
+    <value>Now wearing {0}.</value>
+  </data>
+  <data name="ShopInsufficientCoins" xml:space="preserve">
+    <value>Not enough coins.</value>
+  </data>
+  <data name="ShopNotOwned" xml:space="preserve">
+    <value>{0} has to be bought first.</value>
+  </data>
+  <data name="ShopPurchased" xml:space="preserve">
+    <value>Bought {0}.</value>
+  </data>
+  <data name="ShopStatusEquipped" xml:space="preserve">
+    <value>equipped</value>
+  </data>
+  <data name="ShopStatusOwned" xml:space="preserve">
+    <value>owned</value>
+  </data>
+  <data name="ShopUnknownSkin" xml:space="preserve">
+    <value>There is no skin called {0}.</value>
+  </data>
+  <data name="SignedUp" xml:space="preserve">
+    <value>Signed up as {0}.</value>
+  </data>
+  <data name="SignUpFailed" xml:space="preserve">
+    <value>Sign-up failed: {0}</value>
+  </data>
+  <data name="StateFinished" xml:space="preserve">
+    <value>Match over</value>
+  </data>
+  <data name="StateGetReady" xml:space="preserve">
+    <value>Get ready...</value>
+  </data>
+  <data name="WaitingForOpponent" xml:space="preserve">
+    <value>Waiting for the opponent...</value>
+  </data>
+  <data name="WindowTooSmall" xml:space="preserve">
+    <value>The console window is smaller than {0}x{1}. The frame may wrap.</value>
+  </data>
+  <data name="mission.clear_40.name" xml:space="preserve">
+    <value>Clear 40 lines</value>
+  </data>
+  <data name="mission.harddrop_30.name" xml:space="preserve">
+    <value>Hard drop 30 times</value>
+  </data>
+  <data name="mission.play_3.name" xml:space="preserve">
+    <value>Play 3 matches</value>
+  </data>
+  <data name="mission.send_20.name" xml:space="preserve">
+    <value>Send 20 garbage lines</value>
+  </data>
+  <data name="mission.win_1.name" xml:space="preserve">
+    <value>Win a match</value>
+  </data>
+  <data name="skin.classic.name" xml:space="preserve">
+    <value>Classic</value>
+  </data>
+  <data name="skin.mono.name" xml:space="preserve">
+    <value>Mono</value>
+  </data>
+  <data name="skin.neon.name" xml:space="preserve">
+    <value>Neon</value>
+  </data>
+  <data name="skin.pastel.name" xml:space="preserve">
+    <value>Pastel</value>
+  </data>
+  <data name="skin.retro.name" xml:space="preserve">
+    <value>Retro</value>
+  </data>
+  <data name="skin.terminal.name" xml:space="preserve">
+    <value>Terminal</value>
+  </data>
+</root>

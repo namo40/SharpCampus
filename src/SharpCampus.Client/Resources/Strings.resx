@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AccountEmailLabel" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="AccountTitle" xml:space="preserve">
+    <value>Account</value>
+  </data>
+  <data name="AccountUserIdLabel" xml:space="preserve">
+    <value>Account id</value>
+  </data>
+  <data name="AppTagline" xml:space="preserve">
+    <value>One on one falling block duels, served by MagicOnion.</value>
+  </data>
+  <data name="DuelTitle" xml:space="preserve">
+    <value>Duel</value>
+  </data>
+  <data name="GuestHint" xml:space="preserve">
+    <value>Guest account: link an email address to keep it.</value>
+  </data>
+  <data name="InteractiveTerminalRequired" xml:space="preserve">
+    <value>SharpCampus needs an interactive terminal. Start it from a console window.</value>
+  </data>
+  <data name="LobbyTitle" xml:space="preserve">
+    <value>Lobby</value>
+  </data>
+  <data name="MenuAccount" xml:space="preserve">
+    <value>Account</value>
+  </data>
+  <data name="MenuBack" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="MenuBuy" xml:space="preserve">
+    <value>Buy</value>
+  </data>
+  <data name="MenuChangeNickname" xml:space="preserve">
+    <value>Change nickname</value>
+  </data>
+  <data name="MenuDuel" xml:space="preserve">
+    <value>Play a duel</value>
+  </data>
+  <data name="MenuEquip" xml:space="preserve">
+    <value>Equip</value>
+  </data>
+  <data name="MenuExit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="MenuHistory" xml:space="preserve">
+    <value>Match history</value>
+  </data>
+  <data name="MenuLinkAccount" xml:space="preserve">
+    <value>Link an email address</value>
+  </data>
+  <data name="MenuLogIn" xml:space="preserve">
+    <value>Log in</value>
+  </data>
+  <data name="MenuLogOut" xml:space="preserve">
+    <value>Log out</value>
+  </data>
+  <data name="MenuMissions" xml:space="preserve">
+    <value>Missions</value>
+  </data>
+  <data name="MenuPlayAsGuest" xml:space="preserve">
+    <value>Play as guest</value>
+  </data>
+  <data name="MenuPrompt" xml:space="preserve">
+    <value>What next?</value>
+  </data>
+  <data name="MenuRankings" xml:space="preserve">
+    <value>Rankings</value>
+  </data>
+  <data name="MenuRetry" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="MenuShop" xml:space="preserve">
+    <value>Shop</value>
+  </data>
+  <data name="MenuSignUp" xml:space="preserve">
+    <value>Sign up</value>
+  </data>
+  <data name="MissionSelect" xml:space="preserve">
+    <value>Pick a mission to claim</value>
+  </data>
+  <data name="MissionsTitle" xml:space="preserve">
+    <value>Missions</value>
+  </data>
+  <data name="PressAnyKey" xml:space="preserve">
+    <value>Press any key to continue.</value>
+  </data>
+  <data name="PromptEmail" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="PromptNickname" xml:space="preserve">
+    <value>New nickname</value>
+  </data>
+  <data name="PromptPassword" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="QueueCancelHint" xml:space="preserve">
+    <value>Press Esc to leave the queue.</value>
+  </data>
+  <data name="RankSelectBoard" xml:space="preserve">
+    <value>Pick a board</value>
+  </data>
+  <data name="RankingsTitle" xml:space="preserve">
+    <value>Rankings</value>
+  </data>
+  <data name="SessionEndedNotice" xml:space="preserve">
+    <value>This session is no longer valid. Signing out.</value>
+  </data>
+  <data name="ShopActionTitle" xml:space="preserve">
+    <value>What would you like to do with {0}?</value>
+  </data>
+  <data name="ShopSelectSkin" xml:space="preserve">
+    <value>Pick a skin</value>
+  </data>
+  <data name="ShopTitle" xml:space="preserve">
+    <value>Shop</value>
+  </data>
+  <data name="ShopWearing" xml:space="preserve">
+    <value>You are already wearing {0}.</value>
+  </data>
+  <data name="TitleMenuTitle" xml:space="preserve">
+    <value>How would you like to play?</value>
+  </data>
+</root>

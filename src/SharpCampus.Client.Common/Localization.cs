@@ -1,10 +1,10 @@
 using System.Globalization;
 
-namespace SharpCampus.Cli;
+namespace SharpCampus.Client.Common;
 
 // The UI culture is pinned at startup instead of being read from the OS, so a session always shows
 // the language the launcher asked for and a verification run is reproducible on any machine.
-internal static class Localization
+public static class Localization
 {
     private const string DefaultLanguage = "en";
     private const string Option = "--lang";

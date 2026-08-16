@@ -3,6 +3,8 @@
     <Project Path="src/SharpCampus.ApiServer/SharpCampus.ApiServer.csproj" />
     <Project Path="src/SharpCampus.BotServer/SharpCampus.BotServer.csproj" />
     <Project Path="src/SharpCampus.Cli/SharpCampus.Cli.csproj" />
+    <Project Path="src/SharpCampus.Client.Common/SharpCampus.Client.Common.csproj" />
+    <Project Path="src/SharpCampus.Client/SharpCampus.Client.csproj" />
     <Project Path="src/SharpCampus.GameCore/SharpCampus.GameCore.csproj" />
     <Project Path="src/SharpCampus.RoomServer/SharpCampus.RoomServer.csproj" />
     <Project Path="src/SharpCampus.Server.Common/SharpCampus.Server.Common.csproj" />

@@ -17,7 +17,9 @@ SharpCampus는 [MagicOnion](https://github.com/Cysharp/MagicOnion)과 [Cysharp](
 | `src/SharpCampus.RoomServer` | 서버 권위 틱 루프를 돌리는 실시간 대전 호스트입니다. |
 | `src/SharpCampus.BotServer` | 대기열에 상대가 없을 때 투입되는 봇 호스트입니다. 봇 계정으로 로그인해 일반 클라이언트와 같은 경로로 플레이합니다. |
 | `src/SharpCampus.Server.Common` | 서버 호스트들이 함께 쓰는 공통 구성 요소입니다. |
-| `src/SharpCampus.Cli` | 게임을 플레이하고 서버를 검증하는 데 쓰는 .NET 콘솔 클라이언트입니다. |
+| `src/SharpCampus.Client` | 실제로 게임을 플레이하는 .NET 콘솔 클라이언트로, 전체 화면 메뉴 방식의 터미널 UI입니다. |
+| `src/SharpCampus.Cli` | 서버 동작을 확인하는 .NET 콘솔 클라이언트로, 명령 하나가 서비스 호출 하나에 대응합니다. |
+| `src/SharpCampus.Client.Common` | 두 클라이언트가 함께 쓰는 로그인, 세션 저장, 다국어 처리, 대전 화면 렌더링입니다. |
 | `tools/SharpCampus.MasterDataTool` | 게임 마스터 데이터 원본을 검증하고, 배포된 서버가 읽는 데이터베이스 파일을 만드는 커맨드라인 도구입니다. |
 | `masterdata/` | 마스터 데이터 원본으로, 테이블마다 JSON 파일이 하나씩 있습니다. 게임 상수, 중력 커브, 공격·콤보 테이블, 코인 보상과 레이팅 상수, 스킨, 미션이 들어 있습니다. |
 | `tests/SharpCampus.Shared.Tests` | `SharpCampus.Shared` 테스트. |
@@ -121,7 +123,9 @@ dotnet run --project tests/SharpCampus.LoadTest
 Redis가 떠 있어야 하고, 봇 서버는 꺼 두어야 합니다. 그래야 대체 상대로 들어온 봇이 측정에 섞이지 않습니다.
 이 도구가 쓰는 계정(`loadtest<N>@sharpcampus.dev`)은 봇 계정과 마찬가지로 처음 쓸 때 자동으로 가입됩니다.
 
-콘솔 클라이언트로 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
+콘솔 클라이언트는 둘입니다. `src/SharpCampus.Client`가 게임 본체이고, `src/SharpCampus.Cli`는 서버 API를
+명령 하나에 호출 하나씩 짚어 보는 REPL입니다. 게임이 하는 호출은 전부 REPL에도 명령으로 있으니 REPL부터
+봅니다. 인자 없이 실행하면 REPL이 시작됩니다.
 
 ```bash
 dotnet run --project src/SharpCampus.Cli
@@ -130,6 +134,8 @@ dotnet run --project src/SharpCampus.Cli
 ```text
 cli> signup player@example.com hunter2
 cli> login player@example.com hunter2
+cli> guest
+cli> link player@example.com hunter2
 cli> whoami
 cli> nickname boardsweeper
 cli> skins
@@ -138,6 +144,7 @@ cli> equip mono
 cli> missions
 cli> claim win_1
 cli> duel
+cli> history
 cli> rank
 cli> rank daily
 cli> logout
@@ -148,6 +155,12 @@ ApiServer에 보내고, 서버는 토큰을 검증한 뒤 어떤 계정인지와
 프로필은 첫 `whoami` 때 계정 ID에서 만든 닉네임으로 생성됩니다. `nickname`은 그 닉네임을 바꾸는 명령입니다. 닉네임은
 영문자와 숫자, 밑줄만 써서 2~16자로 지어야 하고, 대소문자를 구분하지 않고 비교하므로 다른 계정이 이미 쓰는 이름은 쓸 수
 없습니다. 모든 명령은 한 번만 실행하는 형태로도 쓸 수 있습니다. 예를 들면 `dotnet run --project src/SharpCampus.Cli -- whoami`처럼 씁니다.
+
+`guest`는 이메일 없이 시작하는 방법입니다. Supabase가 익명으로 로그인시켜 주고, 그 계정도 다른 계정과 똑같이
+플레이하고 코인을 벌고 순위에 오릅니다. `link`는 그 계정에 이메일과 비밀번호를 붙여 정식 계정으로 만드는
+명령입니다. 사용자 ID가 그대로이므로 게스트로 모아 둔 코인과 레이팅, 대전 기록도 하나 빠짐없이 남습니다.
+이를 위해 로컬 스택 두 곳(`supabase/config.toml`과 클러스터의 GoTrue 매니페스트) 모두 익명 로그인을 켜
+두었습니다.
 
 `skins`는 코스메틱 보드 테마 6종을 가격, 보유 여부, 장착 여부와 함께 보여줍니다. `buy`는 대전에서 번 코인으로 스킨을
 사는 명령입니다. 잔액 확인과 코인 차감, 소유 기록이 단일 데이터베이스 트랜잭션으로 처리되므로, 잔액을 넘는 구매나 중복
@@ -172,11 +185,33 @@ ApiServer가 봇 서버에 상대를 요청합니다. 봇은 자기 계정으로
 낮고 평평하며 빈칸을 묻지 않는 결과를 고른 다음, 거기까지 가는 입력을 R3 스트림으로 한 박자에 하나씩 보냅니다. 그래야
 방이 틱마다 받아 주는 입력 한도 안에 전부 들어갑니다.
 
+`history`는 최근에 치른 대전을 최신순으로 되짚어 줍니다. 상대가 누구였는지, 어떻게 끝났는지, 그 결과로
+레이팅과 코인이 얼마나 움직였는지를 보여줍니다. 메타 게임 서버의 `IMatchHistoryService`가 이미 Postgres에
+남아 있는 정산된 대전 기록에서 호출한 계정의 몫만 골라 응답하므로, 정산이 기록되는 순간 목록에 나타납니다.
+
 `rank`는 레이팅 순위표의 상위 100위를 보여주고, 내 자리는 강조해서 표시합니다. 내가 100위 밖이면 구분선 아래에 따로
 붙여 줍니다. `rank daily`는 같은 방식으로 오늘(UTC 날짜 기준) 정산된 승수 순위표를 읽습니다. 두 순위표 모두 룸 서버가
 매치를 정산하면서 기록하는 Redis Sorted Set입니다. 원본은 어디까지나 PostgreSQL이라서, 순위표 기록이 실패해도 정산은
 그대로 남고 다시 만들어야 할 것은 순위표뿐입니다. 일간 순위표는 키에 날짜가 들어 있고 스스로 만료되는데, 일간 초기화는
 그것으로 끝입니다.
+
+게임 본체는 다른 클라이언트입니다. 여기에는 입력할 명령이 없고, 화면 전체를 차지한 채 타이틀 화면부터
+방향키와 Enter만으로 조작합니다.
+
+```bash
+dotnet run --project src/SharpCampus.Client
+```
+
+타이틀 화면에는 로그인, 회원가입, 게스트로 플레이, 종료가 있고, 그다음은 로비입니다. 로비 위쪽에는 닉네임과
+코인, 레이팅, 장착 스킨이 있고 그 아래에 대전 시작, 상점, 미션, 순위, 대전 기록, 계정, 종료 메뉴가 있습니다.
+대전 시작을 고르면 대기열에 들어가고(기다리는 동안 Esc를 누르면 대기열에서 빠집니다), 상대가 잡히면 REPL의
+`duel`이 쓰는 것과 같은 보드 렌더러에 화면 전체를 넘깁니다. 조작 키도 그대로입니다. 대전이 끝나면 결과와
+재대결 확인이 이어지고, 어느 쪽으로 답하든 로비로 돌아옵니다. 다만 터미널을 온전히 써야 하는 클라이언트라서,
+입력이나 출력이 리다이렉트되어 있으면 안내만 출력하고 종료합니다.
+
+속을 들여다보면 두 클라이언트는 하나입니다. 로그인과 세션 파일, 번역 문자열, 대전 화면 렌더링이 전부
+`src/SharpCampus.Client.Common`에 있어서 어느 쪽으로 시작하든 대전은 똑같이 진행됩니다. `--lang en|ko|ja`
+옵션과 서버 주소를 지정하는 `SHARPCAMPUS_SERVER` 환경 변수도 양쪽이 같습니다.
 
 다 사용했으면 `supabase stop`으로 스택을 내리고, `docker rm -f sharpcampus-redis`로 Redis 컨테이너를 정리합니다.
 

@@ -1,8 +1,8 @@
 using System.CommandLine.Parsing;
 using ConsoleAppFramework;
 using MagicOnion.Serialization;
-using SharpCampus.Cli;
 using SharpCampus.Cli.Resources;
+using SharpCampus.Client.Common;
 using SharpCampus.Shared.Serialization;
 using Spectre.Console;
 

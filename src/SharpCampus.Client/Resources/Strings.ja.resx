@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AccountEmailLabel" xml:space="preserve">
+    <value>メールアドレス</value>
+  </data>
+  <data name="AccountTitle" xml:space="preserve">
+    <value>アカウント</value>
+  </data>
+  <data name="AccountUserIdLabel" xml:space="preserve">
+    <value>アカウント ID</value>
+  </data>
+  <data name="AppTagline" xml:space="preserve">
+    <value>MagicOnion で動く 1 対 1 の落ちものパズル対戦。</value>
+  </data>
+  <data name="DuelTitle" xml:space="preserve">
+    <value>対戦</value>
+  </data>
+  <data name="GuestHint" xml:space="preserve">
+    <value>ゲストアカウントです。メールアドレスを連携すると引き続き使えます。</value>
+  </data>
+  <data name="InteractiveTerminalRequired" xml:space="preserve">
+    <value>SharpCampus は対話型ターミナルが必要です。コンソールウィンドウから起動してください。</value>
+  </data>
+  <data name="LobbyTitle" xml:space="preserve">
+    <value>ロビー</value>
+  </data>
+  <data name="MenuAccount" xml:space="preserve">
+    <value>アカウント</value>
+  </data>
+  <data name="MenuBack" xml:space="preserve">
+    <value>戻る</value>
+  </data>
+  <data name="MenuBuy" xml:space="preserve">
+    <value>購入</value>
+  </data>
+  <data name="MenuChangeNickname" xml:space="preserve">
+    <value>ニックネーム変更</value>
+  </data>
+  <data name="MenuDuel" xml:space="preserve">
+    <value>対戦する</value>
+  </data>
+  <data name="MenuEquip" xml:space="preserve">
+    <value>装備</value>
+  </data>
+  <data name="MenuExit" xml:space="preserve">
+    <value>終了</value>
+  </data>
+  <data name="MenuHistory" xml:space="preserve">
+    <value>対戦記録</value>
+  </data>
+  <data name="MenuLinkAccount" xml:space="preserve">
+    <value>メールアドレスを連携</value>
+  </data>
+  <data name="MenuLogIn" xml:space="preserve">
+    <value>ログイン</value>
+  </data>
+  <data name="MenuLogOut" xml:space="preserve">
+    <value>ログアウト</value>
+  </data>
+  <data name="MenuMissions" xml:space="preserve">
+    <value>ミッション</value>
+  </data>
+  <data name="MenuPlayAsGuest" xml:space="preserve">
+    <value>ゲストで遊ぶ</value>
+  </data>
+  <data name="MenuPrompt" xml:space="preserve">
+    <value>次は何をしますか?</value>
+  </data>
+  <data name="MenuRankings" xml:space="preserve">
+    <value>ランキング</value>
+  </data>
+  <data name="MenuRetry" xml:space="preserve">
+    <value>再試行</value>
+  </data>
+  <data name="MenuShop" xml:space="preserve">
+    <value>ショップ</value>
+  </data>
+  <data name="MenuSignUp" xml:space="preserve">
+    <value>新規登録</value>
+  </data>
+  <data name="MissionSelect" xml:space="preserve">
+    <value>報酬を受け取るミッションを選んでください</value>
+  </data>
+  <data name="MissionsTitle" xml:space="preserve">
+    <value>ミッション</value>
+  </data>
+  <data name="PressAnyKey" xml:space="preserve">
+    <value>何かキーを押すと続行します。</value>
+  </data>
+  <data name="PromptEmail" xml:space="preserve">
+    <value>メールアドレス</value>
+  </data>
+  <data name="PromptNickname" xml:space="preserve">
+    <value>新しいニックネーム</value>
+  </data>
+  <data name="PromptPassword" xml:space="preserve">
+    <value>パスワード</value>
+  </data>
+  <data name="QueueCancelHint" xml:space="preserve">
+    <value>Esc キーで待機列から抜けます。</value>
+  </data>
+  <data name="RankSelectBoard" xml:space="preserve">
+    <value>ランキングを選んでください</value>
+  </data>
+  <data name="RankingsTitle" xml:space="preserve">
+    <value>ランキング</value>
+  </data>
+  <data name="SessionEndedNotice" xml:space="preserve">
+    <value>このセッションは無効になりました。ログアウトします。</value>
+  </data>
+  <data name="ShopActionTitle" xml:space="preserve">
+    <value>{0} をどうしますか?</value>
+  </data>
+  <data name="ShopSelectSkin" xml:space="preserve">
+    <value>スキンを選んでください</value>
+  </data>
+  <data name="ShopTitle" xml:space="preserve">
+    <value>ショップ</value>
+  </data>
+  <data name="ShopWearing" xml:space="preserve">
+    <value>すでに {0} を装備しています。</value>
+  </data>
+  <data name="TitleMenuTitle" xml:space="preserve">
+    <value>どのように遊びますか?</value>
+  </data>
+</root>

@@ -1,13 +1,13 @@
-using SharpCampus.Cli.Duel;
+using SharpCampus.Client.Common.Duel;
 using SharpCampus.Shared.Duel;
 using SharpCampus.Shared.Values;
 
-namespace SharpCampus.Cli;
+namespace SharpCampus.Client.Common;
 
 // Everything a duel room pushes arrives on the hub's receive loop, while the command thread applies
 // the snapshot it asked for and the render loop reads the boards; the lock is what keeps all three
 // off each other's replica.
-internal sealed class DuelReceiver(DuelStatus status) : IDuelHubReceiver
+public sealed class DuelReceiver(DuelStatus status) : IDuelHubReceiver
 {
     private readonly Lock _gate = new();
 
@@ -105,7 +105,7 @@ internal sealed class DuelReceiver(DuelStatus status) : IDuelHubReceiver
 }
 
 // The question the room is waiting on, handed to whoever owns the console.
-internal sealed class RematchOffer(DuelReceiver receiver, int timeoutSeconds)
+public sealed class RematchOffer(DuelReceiver receiver, int timeoutSeconds)
 {
     private readonly TaskCompletionSource<bool> _answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
 

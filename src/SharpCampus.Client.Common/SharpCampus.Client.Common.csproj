@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="MagicOnion.Client" />
+    <PackageReference Include="ZString" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpCampus.Shared\SharpCampus.Shared.csproj" />
+    <ProjectReference Include="..\SharpCampus.GameCore\SharpCampus.GameCore.csproj" />
+  </ItemGroup>
+
+</Project>

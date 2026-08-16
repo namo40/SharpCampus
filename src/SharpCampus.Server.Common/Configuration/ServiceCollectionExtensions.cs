@@ -74,6 +74,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IProfileRepository, ProfileRepository>();
         services.AddScoped<IShopRepository, ShopRepository>();
         services.AddScoped<IMissionRepository, MissionRepository>();
+        services.AddScoped<IMatchHistoryRepository, MatchHistoryRepository>();
         return services;
     }
 

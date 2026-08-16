@@ -2,10 +2,12 @@ using ConsoleAppFramework;
 using Grpc.Core;
 using Grpc.Net.Client;
 using MagicOnion.Client;
-using SharpCampus.Cli.Resources;
+using SharpCampus.Client.Common;
+using SharpCampus.Client.Common.Resources;
 using SharpCampus.Shared.Dtos;
 using SharpCampus.Shared.Services;
 using Spectre.Console;
+using CliStrings = SharpCampus.Cli.Resources.Strings;
 
 namespace SharpCampus.Cli.Commands;
 
@@ -28,7 +30,7 @@ internal sealed class RankCommands
 
         if (KindOf(board) is not { } kind)
         {
-            AnsiConsole.MarkupLineInterpolated($"[red]{Strings.RankUsage}[/]");
+            AnsiConsole.MarkupLineInterpolated($"[red]{CliStrings.RankUsage}[/]");
             return;
         }
 
