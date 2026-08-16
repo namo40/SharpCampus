@@ -1,8 +1,12 @@
+using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using SharpCampus.ApiServer.Matchmaking;
+using SharpCampus.ApiServer.Observability;
 using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Data;
 using SharpCampus.Server.Common.MasterData;
@@ -16,6 +20,7 @@ using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Values;
+using StackExchange.Redis;
 using Xunit;
 
 namespace SharpCampus.ApiServer.Tests;
@@ -49,8 +54,14 @@ public class MatchmakingWorkerTests
     private readonly IProfileRepository _profiles = Substitute.For<IProfileRepository>();
     private readonly List<UserId> _waiting = [];
 
+    private readonly IMeterFactory _meters =
+        new ServiceCollection().AddMetrics().BuildServiceProvider().GetRequiredService<IMeterFactory>();
+
+    private readonly MatchmakingMetrics _metrics;
+
     public MatchmakingWorkerTests()
     {
+        _metrics = new MatchmakingMetrics(_meters);
         _pairingLock.TryAcquireAsync().Returns(true);
         _registry.FindLeastLoadedAsync().Returns(_server);
         _roomControl.CreateRoomAsync(Arg.Any<string>(), Arg.Any<CreateRoomRequest>()).Returns(CreateRoomResult.Created);
@@ -305,6 +316,60 @@ public class MatchmakingWorkerTests
         await _botCooldown.Received(1).StartAsync();
     }
 
+    [Fact]
+    public async Task EveryPass_LeavesTheQueueDepthOnTheGauge()
+    {
+        QueueHolds(_first, _second, _third);
+        _queue.CountAsync().Returns(3L);
+
+        using var collector = Collector();
+        await CreateWorker().PairAsync();
+        collector.RecordObservableInstruments();
+
+        Assert.Equal(3, collector.LastMeasurement?.Value);
+    }
+
+    [Fact]
+    public async Task PassThatNeverGetsTheLock_ReportsTheDepthAllTheSame()
+    {
+        // The queue belongs to every instance, and only the one holding the lock pairs out of it: a depth
+        // reported by the winner alone would read as zero everywhere else.
+        _pairingLock.TryAcquireAsync().Returns(false);
+        _queue.CountAsync().Returns(2L);
+
+        using var collector = Collector();
+        await CreateWorker().PairAsync();
+        collector.RecordObservableInstruments();
+
+        Assert.Equal(2, collector.LastMeasurement?.Value);
+    }
+
+    [Fact]
+    public async Task PassWithRedisGone_IsSkippedInsteadOfKillingTheWorker()
+    {
+        _queue.CountAsync().ThrowsAsync(RedisDown());
+
+        await CreateWorker().PairAsync();
+
+        await _pairingLock.DidNotReceive().TryAcquireAsync();
+    }
+
+    [Fact]
+    public async Task RedisFailingMidPass_StillHandsThePairingLockBack()
+    {
+        _queue.PeekPairAsync().ThrowsAsync(RedisDown());
+
+        await CreateWorker().PairAsync();
+
+        await _pairingLock.Received(1).ReleaseAsync();
+    }
+
+    private static RedisConnectionException RedisDown() =>
+        new(ConnectionFailureType.UnableToConnect, CommandFlags.None, "down");
+
+    private MetricCollector<long> Collector() =>
+        new(_meters, MatchmakingMetrics.MeterName, MatchmakingMetrics.QueueDepthName);
+
     private void QueueHolds(params UserId[] waiting) => _waiting.AddRange(waiting);
 
     private void LoneEntry(UserId userId, TimeSpan waited)
@@ -343,6 +408,7 @@ public class MatchmakingWorkerTests
             EntryTokens(),
             scopes,
             _masterData,
+            _metrics,
             Options.Create(new BotFallbackOptions { SummonAfterSeconds = SummonAfterSeconds }),
             NullLogger<MatchmakingWorker>.Instance);
     }

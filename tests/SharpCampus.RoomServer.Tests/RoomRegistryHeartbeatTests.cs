@@ -2,10 +2,12 @@ using Cysharp.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Server.Common.Rooms;
 using SharpCampus.Shared.Values;
+using StackExchange.Redis;
 using Xunit;
 
 namespace SharpCampus.RoomServer.Tests;
@@ -65,6 +67,57 @@ public class RoomRegistryHeartbeatTests
         await _registry.Received(1).RemoveAsync("test");
     }
 
+    [Fact]
+    public async Task BeatWithRedisGone_IsMissedInsteadOfKillingTheServer()
+    {
+        var beaten = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _registry.RegisterAsync(Arg.Any<RoomServerEntry>()).Returns(_ =>
+        {
+            beaten.TrySetResult();
+            return Task.FromException(RedisDown());
+        });
+
+        using var pool = new ManualLogicLooperPool(20);
+        var options = RoomFixture.Options();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var heartbeat = CreateHeartbeat(CreateRooms(pool, options), options);
+
+        await heartbeat.StartAsync(cancellationToken);
+
+        try
+        {
+            await beaten.Task.WaitAsync(_timeout, cancellationToken);
+
+            // The failed beat needs a moment to travel from the registry call to wherever it would land.
+            await Task.Delay(100, cancellationToken);
+
+            Assert.False(heartbeat.ExecuteTask!.IsCompleted);
+        }
+        finally
+        {
+            await heartbeat.StopAsync(cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task ShutdownWithRedisGone_StillGetsToTheEnd()
+    {
+        _registry.RemoveAsync(Arg.Any<string>()).ThrowsAsync(RedisDown());
+
+        using var pool = new ManualLogicLooperPool(20);
+        var options = RoomFixture.Options();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var heartbeat = CreateHeartbeat(CreateRooms(pool, options), options);
+
+        await heartbeat.StartAsync(cancellationToken);
+        await heartbeat.StopAsync(cancellationToken);
+
+        await _registry.Received(1).RemoveAsync("test");
+    }
+
+    private static RedisConnectionException RedisDown() =>
+        new(ConnectionFailureType.UnableToConnect, CommandFlags.None, "down");
+
     private static RoomManager CreateRooms(ILogicLooperPool pool, IOptions<RoomServerOptions> options)
         => new(
             pool,
@@ -73,6 +126,7 @@ public class RoomRegistryHeartbeatTests
             RoomFixture.ActiveRooms(),
             options,
             RoomFixture.Publisher(),
+            RoomFixture.Metrics(),
             NullLogger<RoomManager>.Instance);
 
     private RoomRegistryHeartbeat CreateHeartbeat(RoomManager rooms, IOptions<RoomServerOptions> options)

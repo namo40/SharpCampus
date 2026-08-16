@@ -19,4 +19,7 @@ public interface IMatchQueue
     // The one account left over once every pair has been placed, with how long it has been waiting.
     // Null unless exactly one is waiting, because anything else still has a partner in reach.
     Task<(UserId UserId, TimeSpan Waited)?> PeekLoneAsync();
+
+    // How many are waiting. Read for the queue depth gauge only: pairing works off the entries themselves.
+    Task<long> CountAsync();
 }

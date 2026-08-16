@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Cysharp.Threading;
 using MessagePipe;
 using Microsoft.Extensions.Options;
 using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.MasterData;
+using SharpCampus.RoomServer.Observability;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.MasterData;
@@ -18,6 +20,7 @@ public sealed class RoomManager(
     IActiveRoomStore activeRooms,
     IOptions<RoomServerOptions> options,
     IAsyncPublisher<MatchFinishedEvent> matchFinished,
+    RoomMetrics metrics,
     ILogger<RoomManager> logger)
 {
     private readonly ConcurrentDictionary<RoomId, DuelRoom> _rooms = new();
@@ -26,6 +29,7 @@ public sealed class RoomManager(
     // lookups stay lock free.
     private readonly Lock _createGate = new();
 
+    // ReSharper disable once InconsistentlySynchronizedField
     internal int RoomCount => _rooms.Count;
 
     // Rooms only ever come into being through the ApiServer: there is no path from a client to a new room.
@@ -45,12 +49,25 @@ public sealed class RoomManager(
 
             var room = new DuelRoom(roomId, players, rules, masterData, logger, matchFinished, Release);
             _rooms[roomId] = room;
-            _ = ObserveAsync(room, loopers.RegisterActionAsync((in _) => room.Tick()));
+            _ = ObserveAsync(room, loopers.RegisterActionAsync((in _) => Tick(room)));
             return CreateRoomOutcome.Created;
         }
     }
 
+    // ReSharper disable once InconsistentlySynchronizedField
     internal bool TryGet(RoomId roomId, out DuelRoom? room) => _rooms.TryGetValue(roomId, out room);
+
+    // How much of the tick budget a room spends is what says whether this process can take another one,
+    // so every tick is measured. Reading the timestamps allocates nothing and costs less than the tick
+    // itself, which is what lets the measurement sit on the loop thread.
+    private bool Tick(DuelRoom room)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var running = room.Tick();
+
+        metrics.RecordTick(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return running;
+    }
 
     // A tick that throws reaches no catch anywhere: LogicLooper hands the exception to the registration
     // task and quietly unregisters the action. Unobserved, that is a room that never ticks again but

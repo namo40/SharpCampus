@@ -36,6 +36,8 @@ public sealed class RedisMatchQueue(IConnectionMultiplexer redis, TimeProvider t
         await database.HashDeleteAsync(WaitingSinceKey, userId.ToString());
     }
 
+    public Task<long> CountAsync() => redis.GetDatabase().ListLengthAsync(QueueKey);
+
     public async Task<(UserId First, UserId Second)?> PeekPairAsync()
     {
         var database = redis.GetDatabase();

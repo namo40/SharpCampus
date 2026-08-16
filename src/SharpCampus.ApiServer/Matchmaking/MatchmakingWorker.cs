@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using SharpCampus.ApiServer.Observability;
 using SharpCampus.Server.Common.Data;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Server.Common.Rooms;
@@ -10,6 +11,7 @@ using SharpCampus.Shared.Internal.Rooms;
 using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Profiles;
 using SharpCampus.Shared.Values;
+using StackExchange.Redis;
 
 namespace SharpCampus.ApiServer.Matchmaking;
 
@@ -27,6 +29,7 @@ internal sealed class MatchmakingWorker(
     EntryTokenService entryTokens,
     IServiceScopeFactory scopes,
     MemoryDatabase masterData,
+    MatchmakingMetrics metrics,
     IOptions<BotFallbackOptions> botFallback,
     ILogger<MatchmakingWorker> logger) : BackgroundService
 {
@@ -54,8 +57,26 @@ internal sealed class MatchmakingWorker(
         }
     }
 
+    // A pass that cannot reach Redis is a pass skipped, not a dead worker: an exception leaving a
+    // BackgroundService stops the whole host, and /readyz is already reporting the outage.
     internal async Task PairAsync()
     {
+        try
+        {
+            await PairOnceAsync();
+        }
+        catch (Exception exception) when (exception is RedisConnectionException or RedisTimeoutException)
+        {
+            logger.PairingPassSkipped(exception.Message);
+        }
+    }
+
+    private async Task PairOnceAsync()
+    {
+        // Read before the lock is asked for, so the instance that loses the race still reports a depth:
+        // the queue is shared, and only one of them ever gets to pair out of it.
+        metrics.ReportQueueDepth(await queue.CountAsync());
+
         if (!await pairingLock.TryAcquireAsync())
         {
             return;

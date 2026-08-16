@@ -19,6 +19,17 @@ public sealed class BotAccountPool(
 
     public int Size => _accounts.Length;
 
+    public int LeasedCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _leased.Count(leased => leased);
+            }
+        }
+    }
+
     // Taking a slot is all a summon may do: its caller pairs matches under a short lock and cannot wait
     // on an auth round trip. Null when every account is out, which is what a summon turns into Exhausted.
     public BotAccount? Lease()

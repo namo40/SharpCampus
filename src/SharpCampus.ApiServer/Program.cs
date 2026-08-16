@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Options;
 using SharpCampus.ApiServer.Matchmaking;
+using SharpCampus.ApiServer.Observability;
 using SharpCampus.Server.Common;
 using SharpCampus.Server.Common.Configuration;
 using SharpCampus.Server.Common.Logging;
 using SharpCampus.Server.Common.MasterData;
+using SharpCampus.Server.Common.Observability;
 using SharpCampus.Server.Common.Services;
 using SharpCampus.Shared.MasterData;
 using SharpCampus.Shared.Serialization;
@@ -18,8 +20,13 @@ builder.Services.AddDatabase(builder.Configuration);
 builder.Services.AddRedis(builder.Configuration);
 builder.Services.AddEntryTokens(builder.Configuration);
 builder.Services.AddMasterData(builder.Configuration);
+builder.Services.AddSharpCampusObservability(
+    builder.Configuration,
+    MatchmakingMetrics.MeterName,
+    configureChecks: checks => checks.AddRedisCheck().AddDatabaseCheck());
 
 builder.Services.Configure<BotFallbackOptions>(builder.Configuration.GetSection(BotFallbackOptions.SectionName));
+builder.Services.AddSingleton<MatchmakingMetrics>();
 builder.Services.AddSingleton<IMatchQueue, RedisMatchQueue>();
 builder.Services.AddSingleton<ITicketStore, RedisTicketStore>();
 builder.Services.AddSingleton<IPairingLock, RedisPairingLock>();
@@ -60,6 +67,12 @@ app.MapMagicOnionService([
     typeof(LeaderboardService),
     typeof(MatchmakingService),
 ]);
+
+app.MapSharpCampusObservability();
+
+// Resolved here rather than by the first caller that needs it: a gauge exists only once its owner does,
+// and an idle server is exactly when a zero on /metrics is worth reading.
+_ = app.Services.GetRequiredService<MatchmakingMetrics>();
 
 app.Logger.ServerStarted(app.Services.GetRequiredService<IOptions<ServerOptions>>().Value.Name, ServerVersion.Current);
 app.Logger.LogMasterData(app.Services.GetRequiredService<MemoryDatabase>());

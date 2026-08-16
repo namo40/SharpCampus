@@ -8,6 +8,8 @@
     <PackageReference Include="MagicOnion.Server" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="ZLogger" />
   </ItemGroup>

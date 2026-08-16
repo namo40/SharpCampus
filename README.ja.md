@@ -102,6 +102,13 @@ dotnet run --project src/SharpCampus.RoomServer
 dotnet run --project src/SharpCampus.BotServer
 ```
 
+3 つのサーバーは、クライアントを受ける gRPC ポートとは別に運用向けの HTTP/1 ポートを開きます。メタゲームサーバーは
+5011、対戦サーバーは 5012、ボットサーバーは 5013 番です。このポートの `/metrics` は、.NET ランタイムと Kestrel、
+MagicOnion の計測値に加えて、ティックの所要時間、進行中のルーム数、待ち行列の長さ、プレイ中のボット数までを返す
+Prometheus のスクレイプ先です。`/healthz` はプロセスが生きているかぎり応答し、`/readyz` はそこに、インスタンスが
+それなしでは動けない Redis と Postgres の状態を加えます。ボットサーバーはどちらにも依存しないため、生きていれば
+そのまま準備完了です。
+
 コンソールクライアントからサーバーを操作します。引数なしで実行すると REPL が起動します。
 
 ```bash

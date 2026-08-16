@@ -103,6 +103,13 @@ and the bot server, in a third:
 dotnet run --project src/SharpCampus.BotServer
 ```
 
+Each of them opens an HTTP/1 port for operations beside the gRPC one it serves clients on — 5011 for the
+meta-game server, 5012 for the match server and 5013 for the bot server. `/metrics` on that port is a
+Prometheus scrape carrying the .NET runtime, Kestrel and MagicOnion counters along with this game's own —
+tick duration, live rooms, queue depth and bots in play; `/healthz` answers for as long as the process
+does, and `/readyz` adds the Redis and Postgres an instance cannot serve without. The bot server has
+neither behind it, so it is ready as soon as it is alive.
+
 Then drive them from the console client, which starts a REPL when you pass no arguments:
 
 ```bash

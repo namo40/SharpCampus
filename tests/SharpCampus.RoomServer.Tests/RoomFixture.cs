@@ -1,11 +1,14 @@
+using System.Diagnostics.Metrics;
 using MagicOnion.Server;
 using MagicOnion.Server.Hubs;
 using MessagePipe;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using SharpCampus.GameCore;
 using SharpCampus.RoomServer.Configuration;
 using SharpCampus.RoomServer.MasterData;
+using SharpCampus.RoomServer.Observability;
 using SharpCampus.RoomServer.Rooms;
 using SharpCampus.Server.Common.Matchmaking;
 using SharpCampus.Shared.Duel;
@@ -200,6 +203,12 @@ internal static class RoomFixture
             rematchTimeoutTicks);
 
     public static IActiveRoomStore ActiveRooms() => Substitute.For<IActiveRoomStore>();
+
+    // A meter factory of its own per call, so what one test measures never reaches another's collector.
+    public static IMeterFactory Meters() =>
+        new ServiceCollection().AddMetrics().BuildServiceProvider().GetRequiredService<IMeterFactory>();
+
+    public static RoomMetrics Metrics() => new(Meters());
 
     public static RecordingPublisher Publisher() => new();
 

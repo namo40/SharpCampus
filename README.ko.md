@@ -101,6 +101,12 @@ dotnet run --project src/SharpCampus.RoomServer
 dotnet run --project src/SharpCampus.BotServer
 ```
 
+세 서버는 클라이언트를 받는 gRPC 포트와 별개로 운영용 HTTP/1 포트를 하나씩 더 엽니다. 메타 게임 서버는 5011,
+대전 서버는 5012, 봇 서버는 5013번입니다. 이 포트의 `/metrics`는 .NET 런타임과 Kestrel, MagicOnion 지표에 더해
+틱 소요 시간, 진행 중인 방 수, 대기열 길이, 플레이 중인 봇 수까지 담은 Prometheus 스크레이프 대상입니다.
+`/healthz`는 프로세스가 살아 있는 한 응답하고, `/readyz`는 여기에 인스턴스가 없으면 서비스할 수 없는 Redis와
+Postgres 상태까지 더합니다. 봇 서버는 그 둘에 의존하지 않으므로 살아 있으면 곧 준비된 상태입니다.
+
 콘솔 클라이언트로 서버를 조작합니다. 인자 없이 실행하면 REPL이 시작됩니다.
 
 ```bash

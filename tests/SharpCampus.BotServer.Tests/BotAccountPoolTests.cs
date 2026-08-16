@@ -96,6 +96,23 @@ public class BotAccountPoolTests
     }
 
     [Fact]
+    public void AccountsOut_AreTheBotsInAMatch()
+    {
+        var pool = CreatePool(2);
+
+        Assert.Equal(0, pool.LeasedCount);
+
+        var first = pool.Lease()!;
+        pool.Lease();
+
+        Assert.Equal(2, pool.LeasedCount);
+
+        pool.Return(first);
+
+        Assert.Equal(1, pool.LeasedCount);
+    }
+
+    [Fact]
     public async Task SecondRunOfASlot_ReusesTheTokenAndTheNameItAlreadyHas()
     {
         var pool = CreatePool(1);

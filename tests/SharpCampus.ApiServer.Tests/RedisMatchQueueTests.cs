@@ -109,6 +109,24 @@ public class RedisMatchQueueTests : IAsyncLifetime
     }
 
     [Fact(Skip = LocalRedis.SkipMessage, SkipUnless = nameof(LocalRedis.IsRunning), SkipType = typeof(LocalRedis))]
+    public async Task Count_IsHowManyAreWaiting()
+    {
+        var redis = LocalRedis.Connection;
+        var queue = await FreshQueueAsync(redis);
+
+        Assert.Equal(0, await queue.CountAsync());
+
+        await queue.EnqueueAsync(_first);
+        await queue.EnqueueAsync(_second);
+
+        Assert.Equal(2, await queue.CountAsync());
+
+        await queue.RemoveAsync(_first);
+
+        Assert.Equal(1, await queue.CountAsync());
+    }
+
+    [Fact(Skip = LocalRedis.SkipMessage, SkipUnless = nameof(LocalRedis.IsRunning), SkipType = typeof(LocalRedis))]
     public async Task LoneEntry_CarriesHowLongItHasBeenWaiting()
     {
         var redis = LocalRedis.Connection;

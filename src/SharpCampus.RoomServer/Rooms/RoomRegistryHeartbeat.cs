@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using SharpCampus.RoomServer.Configuration;
 using SharpCampus.Server.Common.Rooms;
+using StackExchange.Redis;
 
 namespace SharpCampus.RoomServer.Rooms;
 
@@ -25,12 +26,22 @@ internal sealed class RoomRegistryHeartbeat(
         {
             do
             {
-                await registry.RegisterAsync(new RoomServerEntry(
-                    settings.Name,
-                    settings.ClientEndpoint,
-                    settings.ControlEndpoint,
-                    rooms.RoomCount,
-                    settings.Capacity));
+                // A beat that cannot reach Redis is a beat missed, not a dead server: an exception
+                // leaving a BackgroundService stops the whole host, and the entry only expires if
+                // Redis outlives its TTL anyway.
+                try
+                {
+                    await registry.RegisterAsync(new RoomServerEntry(
+                        settings.Name,
+                        settings.ClientEndpoint,
+                        settings.ControlEndpoint,
+                        rooms.RoomCount,
+                        settings.Capacity));
+                }
+                catch (Exception exception) when (exception is RedisConnectionException or RedisTimeoutException)
+                {
+                    logger.HeartbeatSkipped(exception.Message);
+                }
             }
             while (await timer.WaitForNextTickAsync(stoppingToken));
         }
@@ -44,8 +55,16 @@ internal sealed class RoomRegistryHeartbeat(
     {
         await base.StopAsync(cancellationToken);
 
-        // Leaving on the way out means the queue stops sending players here immediately rather than
-        // once the entry expires.
-        await registry.RemoveAsync(options.Value.Name);
+        try
+        {
+            // Leaving on the way out means the queue stops sending players here immediately rather than
+            // once the entry expires.
+            await registry.RemoveAsync(options.Value.Name);
+        }
+        catch (Exception exception) when (exception is RedisConnectionException or RedisTimeoutException)
+        {
+            // With Redis gone there is nothing to leave from; the TTL retires the entry.
+            logger.HeartbeatSkipped(exception.Message);
+        }
     }
 }

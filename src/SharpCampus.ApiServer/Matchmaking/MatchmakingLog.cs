@@ -34,4 +34,7 @@ internal static partial class MatchmakingLog
 
     [ZLoggerMessage(LogLevel.Warning, "Bot server unreachable for {userId}, alone in the queue for {waitedSeconds}s")]
     public static partial void BotSummonFailed(this ILogger logger, UserId userId, int waitedSeconds);
+
+    [ZLoggerMessage(LogLevel.Warning, "A pairing pass could not reach Redis: {reason}")]
+    public static partial void PairingPassSkipped(this ILogger logger, string reason);
 }
