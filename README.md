@@ -4,7 +4,7 @@
 
 SharpCampus is an educational reference game server built with [MagicOnion](https://github.com/Cysharp/MagicOnion) and the [Cysharp](https://github.com/Cysharp) library ecosystem, implementing a 1v1 console tetromino duel in the falling-block puzzle genre known from Tetris.
 
-Everything from the game servers down to containerized deployment lives in this one codebase, and a companion learning site walks through each library against this code.
+Everything from the game servers down to containerized deployment lives in this one codebase, and a companion [learning site](https://namo40.github.io/SharpCampus/) walks through each library against this code.
 
 ## Solution structure
 
