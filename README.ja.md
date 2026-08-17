@@ -2,6 +2,9 @@
 
 [English](README.md) | [한국어](README.ko.md) | **日本語**
 
+> [!NOTE]
+> この教材は[Claude Fable 5](https://www.anthropic.com/news/claude-fable-5-mythos-5)で制作されました。
+
 SharpCampus は [MagicOnion](https://github.com/Cysharp/MagicOnion) と [Cysharp](https://github.com/Cysharp) のライブラリ群で1対1コンソールのテトロミノ対戦ゲーム（テトリスでおなじみの落ち物パズルジャンル）を実装した、教育用リファレンスゲームサーバーです。
 
 ゲームサーバーからコンテナデプロイまでが一つのコードベースであり、このコードに沿ってライブラリを一つずつ解説する[学習サイト](https://namo40.github.io/SharpCampus/ja/)を提供します。

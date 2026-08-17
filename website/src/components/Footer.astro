@@ -1,0 +1,31 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+
+const CREDITS = {
+  en: { before: 'This material was produced with ', after: '.' },
+  ko: { before: '이 자료는 ', after: '로 제작되었습니다.' },
+  ja: { before: 'この教材は', after: 'で制作されました。' },
+};
+
+// `locale` is undefined on the root (English) locale.
+const locale = Astro.locals.starlightRoute.locale ?? 'en';
+const credit = CREDITS[locale as keyof typeof CREDITS] ?? CREDITS.en;
+---
+
+<Default><slot /></Default>
+<p class="site-credit">
+  {credit.before}<a href="https://www.anthropic.com/news/claude-fable-5-mythos-5">Claude Fable 5</a>{credit.after}
+</p>
+
+<style>
+  .site-credit {
+    margin-top: 1rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+
+  .site-credit a {
+    color: var(--sl-color-gray-3);
+    text-decoration: underline;
+  }
+</style>

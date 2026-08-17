@@ -31,6 +31,7 @@ export default defineConfig({
       },
       customCss: ['./src/styles/custom.css'],
       routeMiddleware: './src/starlightRouteData.ts',
+      components: { Footer: './src/components/Footer.astro' },
       sidebar: [
         {
           label: 'Getting Started',
