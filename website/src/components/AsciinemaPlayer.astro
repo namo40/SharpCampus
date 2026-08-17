@@ -1,0 +1,43 @@
+---
+import 'asciinema-player/dist/bundle/asciinema-player.css';
+
+interface Props {
+  /** Cast file path relative to `public/`, e.g. `casts/duel.cast`. */
+  src: string;
+  cols?: number;
+  rows?: number;
+  /** Preview frame shown before playback, e.g. `npt:0:33`. */
+  poster?: string;
+}
+
+const { src, cols, rows, poster } = Astro.props;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const castUrl = `${base}/${src.replace(/^\//, '')}`;
+---
+
+<div
+  class="sc-asciinema-player"
+  data-cast={castUrl}
+  data-cols={cols === undefined ? undefined : String(cols)}
+  data-rows={rows === undefined ? undefined : String(rows)}
+  data-poster={poster}
+>
+</div>
+
+<script>
+  import { create } from 'asciinema-player';
+
+  for (const el of document.querySelectorAll('.sc-asciinema-player[data-cast]')) {
+    const node = el as HTMLElement;
+    if (node.dataset.mounted) continue;
+    node.dataset.mounted = 'true';
+
+    const { cast, cols, rows, poster } = node.dataset;
+    create(cast!, node, {
+      cols: cols ? Number(cols) : undefined,
+      rows: rows ? Number(rows) : undefined,
+      poster,
+    });
+  }
+</script>

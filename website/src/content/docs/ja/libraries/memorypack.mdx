@@ -1,0 +1,69 @@
+---
+title: MemoryPack
+description: C# のメモリレイアウトをほぼそのまま使うゼロエンコーディング直列化ライブラリ。サーバー同士だけが読み書きする Redis キャッシュに採用した理由を扱います。
+sidebar:
+  order: 12
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MemoryPack は Cysharp のバイナリ直列化ライブラリで、「ゼロエンコーディング」がその正体です。フィールドを 1 つずつタグ付きで変換する代わりに、C# オブジェクトのメモリレイアウトをほぼそのまま読み書きするため、MessagePack よりもさらに一段速くなります。ソースジェネレーター専用の設計でリフレクション経路そのものがなく、そのぶん要求もはっきりしています。動くのは .NET 7 以上だけです。バージョンは 1.21.4 です。
+
+- GitHub: [Cysharp/MemoryPack](https://github.com/Cysharp/MemoryPack)
+
+## なぜ使うのか
+
+直列化ライブラリの選択は「両端に誰がいるか」の問題です。クライアントとやり取りする契約は、フォーマット規格が公開されていてプラットフォームを選ばない [MessagePack](../messagepack/) が受け持ちます。一方リーダーボードのキャッシュは、Redis に置かれている間、読み書きするのは私たちのサーバープロセスだけです。両端がどちらも同じ .NET サーバーなら、クロスプラットフォームの義務はありません。残る基準は速度だけなので、その席にいちばん速い直列化ライブラリを置いたわけです。
+
+このプロジェクトでの採用場所はキャッシュ 1 か所と小さいのですが、「境界の性格が直列化ライブラリを選ぶ」という選択基準そのものが、このページの主題です。
+
+## キャッシュ専用の型: 契約を再利用しない
+
+キャッシュに置かれる型は、`[MemoryPackable]` を付けた partial record が 1 つあるだけです。
+
+```csharp
+// The cache's own wire format, mirroring the contract DTO rather than reusing it: MemoryPack needs
+// .NET 7 or newer and SharpCampus.Shared is built for netstandard2.1, so what crosses the wire to a
+// client and what sits in Redis between servers are serialized by different libraries on purpose.
+[MemoryPackable]
+internal sealed partial record CachedLeaderboardEntry(int Rank, string Nickname, int Score);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Leaderboards/CachedLeaderboardEntry.cs" />
+
+契約側にはそっくり同じ形の `LeaderboardEntry` がすでにあるのに、再利用せずミラーリングしています。契約が住む `SharpCampus.Shared` は Unity との共有を見据えて netstandard2.1 でビルドされ、MemoryPack は .NET 7 以上を要求するからです。結果として「クライアントへ出るワイヤ(MessagePack)」と「サーバー間の Redis(MemoryPack)」が別のライブラリで直列化されますが、これは回避策ではなく意図した分離です。キャッシュのフォーマットは契約ではないので、契約アセンブリに縛られる理由がありません。
+
+## キャッシュの読み書き
+
+使い方は静的メソッド 2 つだけです。組み立て済みのリーダーボードページを丸ごと直列化して Redis の文字列 1 つに入れ、読むときに戻します。
+
+```csharp
+public sealed class RedisLeaderboardCache(IConnectionMultiplexer redis) : ILeaderboardCache
+{
+    // Expiry is the only invalidation there is, so this window is what a settlement can be behind by:
+    // for up to five seconds a page still lists the places, and the nicknames, it was assembled from.
+    private static readonly TimeSpan _lifetime = TimeSpan.FromSeconds(5);
+
+    public async Task<LeaderboardEntry[]?> GetTopAsync(string board)
+    {
+        var value = await redis.GetDatabase().StringGetAsync(LeaderboardKeys.Cache(board));
+        if (value.IsNullOrEmpty)
+        {
+            return null;
+        }
+
+        var cached = MemoryPackSerializer.Deserialize<CachedLeaderboardEntry[]>(((ReadOnlyMemory<byte>)value).Span);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Leaderboards/RedisLeaderboardCache.cs" />
+
+`MemoryPackSerializer.Serialize` が `byte[]` を返し、`Deserialize` が `Span` を受け取る、設定のいらない対称 API です。リゾルバーもオプションオブジェクトも登場しないのは、ソースジェネレーターが型ごとのフォーマッターをコンパイル時にすべて確定させているからです。
+
+## 無効化は有効期限が肩代わりする
+
+キャッシュの寿命は 5 秒で、これが唯一の無効化です。精算が順位を変えてもキャッシュを消しには来ないので、ページは最大 5 秒まで精算より遅れることがあります。リーダーボードの上位 100 名はアカウント単位のデータではなく全員が同じものを見るページなので、この遅れを受け入れる代わりに、読み取りの集中が Redis のソート済みセット演算とニックネームの一括照会に波及するのを防いでいます。キャッシュを埋める側と読む側がどの流れに置かれているかは、[精算イベントの解説](../../architecture/settlement/)が扱います。
+
+## あわせて読む
+
+- [MessagePack-CSharp](../messagepack/): 契約側の直列化ライブラリと、2 つのライブラリの役割分担
+- [精算イベント](../../architecture/settlement/): このキャッシュが置かれたリーダーボード更新の流れ

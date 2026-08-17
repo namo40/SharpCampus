@@ -1,0 +1,55 @@
+---
+title: "第2部: Docker Compose"
+description: サーバーをコンテナイメージにビルドし、Envoyの単一エントリポイントの後ろで全スタックを動かします。
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import SourceLink from '../../../../components/SourceLink.astro';
+
+第1部ではサーバーをソースから実行しました。今回は実際のデプロイ形態です。1つのComposeファイル（<SourceLink path="deploy/docker/docker-compose.yml" />）が、メタゲームサーバー、対戦サーバー2台（`room-1`・`room-2`）、ボットサーバーをイメージにビルドし、その前にEnvoyのエントリポイントを、隣にスタック専用のRedisを立てます。
+
+Supabaseだけは引き続きホスト側のスタックです。第1部と同じコマンドで`supabase start`が動いていて、スキーマが適用済みである必要があります。
+
+## 1. 立ち上げと停止
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build -d
+docker compose -f deploy/docker/docker-compose.yml down
+```
+
+初回ビルドはサーバーとマスターデータのデータベースをイメージ内にコンパイルするため、数分かかります。
+
+## 2. クライアントが知っているのはポート1つ
+
+クライアントはすべてにエントリポイントのポート5000経由でアクセスします。環境変数`SHARPCAMPUS_SERVER`をそこへ向けます。
+
+<Tabs>
+  <TabItem label="PowerShell">
+    ```powershell
+    $env:SHARPCAMPUS_SERVER = 'http://localhost:5000'; dotnet run --project src/SharpCampus.Client
+    ```
+  </TabItem>
+  <TabItem label="POSIXシェル">
+    ```bash
+    SHARPCAMPUS_SERVER=http://localhost:5000 dotnet run --project src/SharpCampus.Client
+    ```
+  </TabItem>
+</Tabs>
+
+`room-id`ヘッダーを持たないgRPC呼び出しはメタゲームサーバーに向かいます。対戦の接続にはヘッダーが付き、Envoyがそのルームを（メタゲームサーバーがRedisを根拠に答える内部エンドポイント経由で）調べ、ルームを所有する対戦サーバーインスタンスへストリームをルーティングします。設定は<SourceLink path="deploy/docker/envoy.yaml" />にあります。
+
+対戦サーバーはホストにポートをまったく公開しません。REPLの`status`コマンドがroomサーバーをunreachableと報告するのはそのためで、正常な応答です。キュー、対戦、ミッション、ショップ、ランキングまで、残りのすべてはポート5000だけで動きます。
+
+## 3. メトリクスを見たいなら
+
+可観測性は独立したプロファイルです。
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
+```
+
+4台のサーバーのメトリクスエンドポイントをスクレイプするPrometheusが [http://localhost:19090](http://localhost:19090) で起動します（慣例の9090はWindowsが予約するポート範囲に入っているため避けています）。ティック所要時間、稼働中のルーム数、キューの深さ、投入中のボット数といったゲーム自身のカウンターも一緒に公開されます。
+
+次は[第3部: kindで動かすKubernetes](../kubernetes/)です。同じイメージをローカルクラスタに載せ、ローリングアップデートが進行中の対戦をどう扱うかを確認します。

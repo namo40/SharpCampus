@@ -1,0 +1,81 @@
+---
+title: ソースジェネレーター
+description: このスタックの半分はコンパイル時に書かれます。7 つのライブラリの生成物マップと、エコシステムがリフレクションから移行した理由を扱います。
+sidebar:
+  order: 3
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+このサイトが扱ったライブラリ 14 種のうち、7 種はソースジェネレーターとして働きます。RPC プロキシ([MagicOnion](../../libraries/magiconion/))、シリアライズフォーマッター([MessagePack](../../libraries/messagepack/)、[MemoryPack](../../libraries/memorypack/))、値オブジェクト([UnitGenerator](../../libraries/unitgenerator/))、型付きクエリ([MasterMemory](../../libraries/mastermemory/))、ログメソッド([ZLogger](../../libraries/zlogger/))、CLI まるごと([ConsoleAppFramework](../../libraries/consoleappframework/))まで、このサーバーのかなりの部分は、人ではなくコンパイラーが書いたコードで動いています。各ページで 1 つずつ見た話を、この編では 1 本の流れに束ねます。**なぜエコシステム全体が同じ方向に動いたのか**です。
+
+## リフレクションの 3 枚の請求書
+
+ソースジェネレーター以前の標準解は、実行時リフレクションと IL 生成でした。実行中に型を覗き込み、その場でシリアライザーやプロキシのコードを作り出す方式は柔軟ですが、請求書が 3 枚届きます。
+
+1. **動かない環境がある**。Unity IL2CPP や Native AOT のように実行時コード生成が禁止された環境では、この方式そのものが動作しません。
+2. **コストが実行時間に請求される**。型解析とコード生成が起動直後と初回呼び出しに集中し、サーバーのウォームアップとコールドスタートを引き延ばします。
+3. **ミスの発見も実行時間に先送りされる**。属性の付け忘れや規約に外れた型はコンパイルを通過し、初めてシリアライズされる瞬間に例外として現れます。
+
+ソースジェネレーターは同じ仕事をコンパイル時に前倒しします。生成コストはビルドが払い、規約違反はビルドエラーになり、成果物は IDE の定義ジャンプで開いて読める普通の C# です。このプロジェクトに Unity クライアントはありませんが、コントラクトのプロジェクトが Unity 共有を前提に netstandard2.1 を狙っているため 1 枚目は現実の要件で、2 枚目と 3 枚目はサーバーだけでもそのまま利得です。
+
+## 生成物マップ
+
+7 つのジェネレーターがそれぞれ何を受け取り、何を作るのかを一望すると、こうなります。
+
+| ライブラリ | 入力 (宣言) | 生成物 | 住む場所 |
+| --- | --- | --- | --- |
+| [MagicOnion](../../libraries/magiconion/) | `[MagicOnionClientGeneration]` マーカー | サービスクライアントプロキシ | Client.Common · BotServer |
+| [MessagePack](../../libraries/messagepack/) | `[MessagePackObject]` 型 | 型ごとのフォーマッター + アセンブリのリゾルバー | Shared (コントラクト) |
+| [UnitGenerator](../../libraries/unitgenerator/) | `[UnitOf]` の空 struct | 値オブジェクト本体 (等価性・演算子・フォーマッター・コンバーター・`Parse`) | Shared |
+| [MasterMemory](../../libraries/mastermemory/) | `[MemoryTable]` モデル | `MemoryDatabase` とテーブルごとの型付きクエリ | Shared |
+| [ZLogger](../../libraries/zlogger/) | `[ZLoggerMessage]` partial メソッド | UTF8 直接書き込みのログ本体 | Server.Common · RoomServer · BotServer |
+| [ConsoleAppFramework](../../libraries/consoleappframework/) | `ConsoleApp.Create()` 呼び出し部とコマンドメソッド | パーサー・ヘルプ・ディスパッチャーの全体 | Cli |
+| [MemoryPack](../../libraries/memorypack/) | `[MemoryPackable]` 型 | 型ごとのフォーマッター | Server.Common |
+
+共通点が 1 つ見えます。入力がすべて**宣言**です。空の struct、partial メソッドのシグネチャ、属性付きの record。開発者は「何があるか」だけを述べ、「どうやるか」は生成物が埋めます。
+
+## 配線が要る場所、要らない場所
+
+7 つのうち 6 つには配線コードがありません。`[UnitOf]` を付ければその struct 自体が完成し、`[MessagePackObject]` のフォーマッターはリゾルバーチェーンが自動発見し([MessagePack ページ](../../libraries/messagepack/)の v3 の話)、`[ZLoggerMessage]` は自分の partial メソッドの本体になります。宣言した場所が、そのまま設置された場所です。
+
+例外が MagicOnion のクライアントプロキシです。コントラクトはインターフェイスなので、「このインターフェイス群の実装を作ってほしい」とスキャン対象を伝えるマーカーが必要になります。
+
+```csharp
+// The bot connects through pre-generated proxies rather than runtime code generation: the dynamic
+// client cannot emit a receiver that carries a client result, and the duel hub's rematch offer is one.
+// The type is only a marker for the assembly to scan: every contract in Shared gets a client.
+[MagicOnionClientGeneration(typeof(IStatusService))]
+internal partial class MagicOnionClientInitializer;
+```
+
+<SourceLink path="src/SharpCampus.BotServer/MagicOnionClientInitializer.cs" />
+
+BotServer のマーカーには、このプロジェクトで事前生成が**選択ではなく必須**になる箇所が書かれています。実行時生成のクライアントは Client Results を載せたハブレシーバーを作り出せず、デュエルハブの再戦提案がまさにその機能を使うのです。一方、ApiServer のサーバー間クライアントにマーカーはありません。`IRoomControlService` は `Shared.Internal` に住んでいてどのマーカーのスキャン範囲にも入らず、サーバープロセスは実行時コード生成が自由な環境なので、既定の経路で足りるからです。同じスタックの中でも、どこまで事前に作っておくかは実行環境が決めます。
+
+## パッケージ参照にも痕跡が残る
+
+ジェネレーターがコンパイラーの部品だという事実は、csproj からも読み取れます。コントラクトプロジェクトの UnitGenerator 参照です。
+
+```xml
+    <PackageReference Include="UnitGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+```
+
+<SourceLink path="src/SharpCampus.Shared/SharpCampus.Shared.csproj" />
+
+実際の配達物は `analyzers` で、`PrivateAssets=all` は「この参照はビルドにだけ使われ、参照する側へは伝播しない」という宣言です。コンパイルが終われば、UnitGenerator は成果物のどこにもいません。生成されたコードだけがアセンブリに残ります。この形の極端が [ConsoleAppFramework](../../libraries/consoleappframework/) です。ランタイムアセンブリ自体が存在しないため、依存関係の一覧にそもそも現れません。MessagePack・MemoryPack・MasterMemory は、ランタイムライブラリとジェネレーターが 1 つのパッケージに同居する混合型です。
+
+## 残るもの: 繰り返しのないコントラクト
+
+7 つの生成物を一歩引いて眺めると、すべてが同じ問題を解いています。**コントラクトと実装の間の機械的な繰り返し**です。DTO を宣言したらフォーマッターは付いてくるべきで、インターフェイスを宣言したらプロキシも、ログテンプレートを宣言したら書き込みコードもそうです。この繰り返しを人が書くと、コストはタイピングではなく**不整合**になります。宣言を直して実装の更新を忘れた瞬間、それはランタイムバグだからです。コンパイルのたびに生成し直されるコードには、その不整合が存在できません。
+
+つまりこのスタックにおけるソースジェネレーターは、性能テクニックというより**宣言を唯一の真実にする装置**に近いのです。性能はその上に付いてくる賞金です。
+
+## 関連ページ
+
+- [MessagePack-CSharp](../../libraries/messagepack/): リフレクションと IL 生成からジェネレーター既定へ移った v3 の転換
+- [UnitGenerator](../../libraries/unitgenerator/): 宣言 1 行が受け取る生成物がもっとも多い事例
+- [ConsoleAppFramework](../../libraries/consoleappframework/): ランタイム依存 0 という極端な形

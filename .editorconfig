@@ -14,6 +14,10 @@ indent_size = 2
 [*.md]
 trim_trailing_whitespace = false
 
+# npm always regenerates the lockfile with LF; asciinema cast files are newline-delimited JSON
+[{package-lock.json,*.cast}]
+end_of_line = lf
+
 [*.cs]
 # Usings
 dotnet_sort_system_directives_first = true

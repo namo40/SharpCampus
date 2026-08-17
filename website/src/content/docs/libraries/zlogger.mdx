@@ -1,0 +1,113 @@
+---
+title: ZLogger
+description: The zero-allocation structured logger writing all three servers' logs straight in UTF8. The ZLoggerMessage source generator and JSON console output.
+sidebar:
+  order: 13
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+ZLogger is a zero-allocation logger built on top of `Microsoft.Extensions.Logging`. Instead of assembling a UTF16 string and encoding it on the way out, it writes UTF8 bytes from the start. Every log the three servers in this project (ApiServer, RoomServer, BotServer) leave behind goes through this library. The version is 2.5.10.
+
+- GitHub: [Cysharp/ZLogger](https://github.com/Cysharp/ZLogger)
+
+## Why this library
+
+Logging is code that is always on, so the cost of one line multiplies by however often it runs. In the standard pipeline, message assembly produces temporary strings, value-type parameters get boxed into `object`, and a UTF8 encoding pass waits at the console. ZLogger replaces that whole path and writes parameters directly into a UTF8 buffer — its formatting engine is Utf8StringInterpolation, the UTF8 successor to the technique behind [ZString](../zstring/). Shipping finished logs to the actual sink happens asynchronously on a background writer thread, so the room server's hot path, ticking 20 times a second, never waits on console I/O.
+
+And yet it is not a separate logging world: ZLogger is a provider for `Microsoft.Extensions.Logging`, so the ASP.NET Core conventions — `ILogger<T>` injection, categories, level filters — all apply unchanged.
+
+## Setup: one line shared by three servers
+
+The logging setup lives in a single extension method in `Server.Common`; each server's `Program.cs` calls `builder.Logging.AddSharpCampusLogging()` and nothing else.
+
+```csharp
+public static ILoggingBuilder AddSharpCampusLogging(this ILoggingBuilder logging)
+{
+    logging.ClearProviders();
+    logging.AddZLoggerConsole(options => options.UseJsonFormatter());
+
+    // The request start/finish log states of this category read the live HttpContext when their
+    // parameters are enumerated, and the json formatter enumerates them on ZLogger's background
+    // writer thread — concurrently with the request. That data race corrupts the request's feature
+    // cache (observed as a NullReferenceException inside routing under load), so these logs must
+    // never reach an asynchronous sink. Same failure class as
+    // https://github.com/dotnet/aspnetcore/issues/41924.
+    logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
+
+    return logging;
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Logging/LoggingBuilderExtensions.cs" />
+
+It removes the default console provider and mounts the ZLogger console with the JSON formatter. Stdout being the only sink is deliberate: in a container environment, collection and rotation belong to the platform, so the process's responsibility ends at writing structured lines to standard output.
+
+The filter in the middle is the most instructive line in the file. ASP.NET Core's request start/finish logs (the `Hosting.Diagnostics` category) carry state objects that read the live `HttpContext` at the moment their parameters are enumerated. ZLogger's JSON formatter performs that enumeration on its background writer thread — concurrently with the thread still handling the request, which makes it a data race on the same `HttpContext` (observed in this project as a `NullReferenceException` inside routing under load). The lesson generalizes to any asynchronous sink: log state must be captured at the moment of logging, and a log that reads live objects on later enumeration must never ride one.
+
+## ZLoggerMessage: log methods at compile time
+
+Rather than interpolating strings at call sites, every log in this project is a partial method declared with `[ZLoggerMessage]`. The shape mirrors .NET's `LoggerMessage`, but the generated body writes UTF8 directly.
+
+```csharp
+public static partial class ServerLog
+{
+    [ZLoggerMessage(LogLevel.Information, "Server {serverName} {version} started")]
+    public static partial void ServerStarted(this ILogger logger, string serverName, string version);
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Logging/ServerLog.cs" />
+
+Log declarations are grouped into static classes per subsystem: besides the shared `ServerLog` there are `RoomLog` (room lifecycle, draining, settlement failures), `MatchmakingLog` (pairing and bot summoning), `BotLog` (bot lifecycle), and `MasterDataLog` (the startup master-data summary) — five in total. A slice of the room-side declarations:
+
+```csharp
+[ZLoggerMessage(LogLevel.Information, "Room {roomId} created with seed {seed}")]
+public static partial void RoomCreated(this ILogger logger, RoomId roomId, ulong seed);
+
+// ...
+
+[ZLoggerMessage(LogLevel.Information, "Room {roomId} finished at tick {tick}: {outcome} by {reason}")]
+public static partial void RoomFinished(
+    this ILogger logger,
+    RoomId roomId,
+    int tick,
+    DuelOutcome outcome,
+    MatchEndReason reason);
+
+// ...
+
+[ZLoggerMessage(LogLevel.Error, "Room {roomId} stopped ticking")]
+public static partial void RoomTickFaulted(this ILogger logger, Exception exception, RoomId roomId);
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/RoomLog.cs" />
+
+A call site becomes the one line `logger.RoomCreated(roomId, seed)`. The gains are not only in performance: with templates and parameter names fixed at compile time, a typo is a build error, and the complete inventory of everything the servers can say lives in five files. Exceptions follow the framework convention — declare an `Exception` parameter, as `RoomTickFaulted` does, and it is recorded alongside.
+
+## JSON output: parameters become properties
+
+With the JSON formatter mounted, here is the line the declaration above actually produces (only line breaks added for reading):
+
+```json
+{
+  "Timestamp": "2026-08-17T18:23:53.9847292+09:00",
+  "LogLevel": "Information",
+  "Category": "SharpCampus.RoomServer.Rooms.RoomManager",
+  "Message": "Room 01K2N0Y6R1V9NXKQ4XH7SJ9F3A created with seed 1234567890",
+  "roomId": "01K2N0Y6R1V9NXKQ4XH7SJ9F3A",
+  "seed": 1234567890
+}
+```
+
+Alongside the rendered sentence (`Message`), each template parameter surfaces as a top-level property under its own name — structured logging where filtering a log collector by `roomId` replays one room's whole life. One detail worth noticing: `roomId` appears as bare 26-character text, no struct envelope. The JsonConverter that [UnitGenerator](../unitgenerator/) generated for the value object is doing its job in log serialization too, so the [Ulid](../ulid/) string looks the same in logs as it does on the wire and in the database.
+
+## Where it is not used
+
+The console client carries no ZLogger. Its console is occupied by the game screen, not logs — that output belongs to Spectre.Console and [ZString](../zstring/). Logging is a server-side story, where there is output meant for a collector rather than a person.
+
+## See also
+
+- [ZString](../zstring/): the client-side face of the same formatting technique
+- [UnitGenerator](../unitgenerator/): the value-object boundary integrations reaching into log properties
+- [LogicLooper](../logiclooper/): the room tick loop these logs narrate

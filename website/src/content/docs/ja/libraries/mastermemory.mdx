@@ -1,0 +1,106 @@
+---
+title: MasterMemory
+description: ゲーム定数を収める読み取り専用インメモリデータベース。型付きクエリはソースジェネレーターが作り、検証は起動時に済ませます。
+sidebar:
+  order: 7
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MasterMemory は Cysharp 製の読み取り専用インメモリデータベースです。ゲームのバランスデータ(マスターデータ)を [MessagePack](../messagepack/) バイナリとして持ち運び、メモリに載せて、ソースジェネレーターが作った型付きクエリで読みます。SharpCampus では、重力カーブ、攻撃・コンボテーブル、スキンカタログ、ミッション定義、経済定数まで、シミュレーションとメタゲームが使うすべての定数の住まいです。バージョンは 3.0.4 です。
+
+- GitHub: [Cysharp/MasterMemory](https://github.com/Cysharp/MasterMemory)
+
+## なぜ使うのか
+
+バランス定数の置き場所は、たいてい 3 択です。コードにハードコードすれば調整のたびに再コンパイル。RDB に置けば読みのたびに往復か、キャッシュ層が 1 枚増えます。MasterMemory は 3 本目の道です。**データはファイルで管理し、実行中はすべてメモリ内のインデックスから読む**。読み取り専用という制約を受け入れる代わりに、クエリは辞書引き程度のコストになり、スキーマは C# の型として固定されます。
+
+同じ形の問題ならどこでも使えますが、このライブラリが生まれた場所がゲームのマスターデータなので、単一行の設定、区間テーブル、カタログといったゲーム型のデータには特によく合います。
+
+## テーブル定義: 属性付きの record
+
+テーブル 1 つが record 1 つです。シミュレーション定数を収める単一行テーブルはこうなっています。
+
+```csharp
+[MemoryTable("game_config")]
+[MessagePackObject(true)]
+public sealed record GameConfig : IValidatable<GameConfig>
+{
+    public const int SingleRowId = 1;
+
+    [PrimaryKey] public int Id { get; init; }
+
+    /// <summary>Simulation ticks per second.</summary>
+    public int TickRate { get; init; }
+
+    // ...
+
+    /// <summary>Ticks a disconnected player keeps their seat.</summary>
+    public int GraceTicks { get; init; }
+
+    // ...
+}
+```
+
+<SourceLink path="src/SharpCampus.Shared/MasterData/GameConfig.cs" />
+
+`[MemoryTable]` を見たソースジェネレーターが `MemoryDatabase` クラスとテーブルごとのクエリ API を生成します。`[PrimaryKey]` は既定の検索キーであり並び順でもあり、キー名を取った `TryFindBySkinId` のようなメソッドがテーブルごとに生えます。
+
+```csharp
+var catalog = masterData.SkinTable.All;
+
+// ...
+
+if (!masterData.SkinTable.TryFindBySkinId(skinId, out var skin))
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/ShopService.cs" />
+
+生成されたテーブルは partial なので、手書きの半分を足すこともできます。スキンテーブルは `OnAfterConstruct` で「無料スキン」を 1 回だけ探しておき、アカウント作成のたびにカタログを見直さずに済ませています。 <SourceLink path="src/SharpCampus.Shared/MasterData/Tables/SkinTable.cs" />
+
+## 検証は起動時に
+
+各テーブルは `IValidatable<T>` を実装して、値の範囲と形を宣言します。`GameConfig` ならすべての数値が正か、行がちょうど 1 つかまで検査します。サーバーはデータを載せた直後に `database.Validate()` を回し、失敗したら**起動を拒否します**。
+
+```csharp
+var result = database.Validate();
+if (result.IsValidationFailed)
+{
+    throw new InvalidOperationException(
+        $"Master data in '{directory}' is invalid.{Environment.NewLine}{result.FormatFailedResults()}");
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/MasterData/MasterDataLoader.cs" />
+
+バランスデータが壊れたまま立ち上がったサーバーは、どうせ最初のマッチで死にます。その死を起動時点まで前倒しするのがこの検証の役割です。
+
+## ソースは JSON、配布はバイナリ
+
+マスターデータの原本は `masterdata/` フォルダーにあるテーブルごとの JSON ファイルです。開発中はサーバーがこのフォルダーを直接インポートし(<SourceLink path="src/SharpCampus.Shared/MasterData/Import/MasterDataImporter.cs" />)、コンテナイメージにはビルド済みの MessagePack バイナリが載ります。同じバイト列をいつ作るかが違うだけです。ローダーはアセンブリの隣を探し、フォルダーがあればインポート、ファイルがあればバイナリロード、どちらもなければ起動拒否です。
+
+## 定数がシミュレーションに届く道
+
+シミュレーションのコアはマスターデータに依存しません。RoomServer の起動時、1 か所でテーブルをシミュレーション定数に変えます。
+
+```csharp
+var config = database.GameConfigTable.All[0];
+
+// MasterMemory keeps each table sorted by its primary key, which is the level here and the
+// cleared line count below, so both project straight onto a zero-based lookup.
+var gravity = new int[database.GravityCurveTable.Count];
+for (var i = 0; i < gravity.Length; i++)
+{
+    gravity[i] = database.GravityCurveTable.All[i].TicksPerCell;
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/MasterData/SimulationConfigFactory.cs" />
+
+主キーでの整列が保証されるので、レベルごとの重力テーブルはゼロ始まりの配列参照にそのまま射影できます。秒単位の値(カウントダウン、再戦の制限時間)はここですべてティックに換算され、この地点を過ぎれば時間の単位はティックだけです。
+
+## あわせて読む
+
+- [MessagePack-CSharp](../messagepack/): このバイナリの直列化基盤
+- [LogicLooper](../logiclooper/): ここで決まったティックレートで回るループ
+- [アーキテクチャ概要](../../architecture/): 「状態の置き場所」の表での MasterMemory の位置

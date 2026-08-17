@@ -1,0 +1,81 @@
+---
+title: 소스 제너레이터
+description: 이 스택의 절반은 컴파일 타임에 짜입니다. 7개 라이브러리의 생성물 지도와, 생태계가 리플렉션에서 소스 제너레이터로 옮겨 온 이유를 다룹니다.
+sidebar:
+  order: 3
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+이 사이트가 다룬 라이브러리 14종 가운데 7종이 소스 제너레이터로 일합니다. RPC 프록시([MagicOnion](../../libraries/magiconion/)), 직렬화 포매터([MessagePack](../../libraries/messagepack/), [MemoryPack](../../libraries/memorypack/)), 값 객체([UnitGenerator](../../libraries/unitgenerator/)), 타입드 쿼리([MasterMemory](../../libraries/mastermemory/)), 로그 메서드([ZLogger](../../libraries/zlogger/)), CLI 전체([ConsoleAppFramework](../../libraries/consoleappframework/))까지, 이 서버의 상당 부분은 사람이 아니라 컴파일러가 짠 코드로 돌아갑니다. 각 페이지에서 하나씩 봤던 이야기를 이 편에서는 하나의 흐름으로 묶습니다. **왜 이 생태계 전체가 같은 방향으로 움직였는가**입니다.
+
+## 리플렉션의 세 가지 청구서
+
+소스 제너레이터 이전의 표준 답은 런타임 리플렉션과 IL 방출이었습니다. 실행 중에 타입을 들여다보고 그 자리에서 직렬화·프록시 코드를 만들어 내는 방식은 유연하지만, 청구서가 3장 날아옵니다.
+
+1. **안 되는 환경이 있다.** Unity IL2CPP나 Native AOT처럼 실행 중 코드 생성이 금지된 환경에서는 이 방식 자체가 동작하지 않습니다.
+2. **비용이 실행 시간에 청구된다.** 타입 분석과 코드 방출이 기동 직후와 첫 호출에 몰려, 서버 웜업과 콜드 스타트를 늘립니다.
+3. **실수의 발견도 실행 시간으로 밀린다.** 애트리뷰트를 빼먹거나 규약을 어긋난 타입은 컴파일은 통과하고, 처음 직렬화되는 순간 예외로 나타납니다.
+
+소스 제너레이터는 같은 일을 컴파일 타임으로 앞당깁니다. 생성 비용은 빌드가 내고, 규약 위반은 빌드 에러가 되고, 결과물은 IDE에서 정의 이동으로 열어 읽을 수 있는 평범한 C#입니다. 이 프로젝트에 Unity 클라이언트는 없지만 계약 프로젝트가 Unity 공유를 전제한 netstandard2.1이라 1번이 실제 요구 사항이고, 2·3번은 서버만 있어도 그대로 이득입니다.
+
+## 생성물 지도
+
+제너레이터 7개가 각각 무엇을 받아 무엇을 만드는지 한눈에 보면 이렇습니다.
+
+| 라이브러리 | 입력 (선언) | 생성물 | 사는 곳 |
+| --- | --- | --- | --- |
+| [MagicOnion](../../libraries/magiconion/) | `[MagicOnionClientGeneration]` 마커 | 서비스 클라이언트 프록시 | Client.Common · BotServer |
+| [MessagePack](../../libraries/messagepack/) | `[MessagePackObject]` 타입 | 타입별 포매터 + 어셈블리 리졸버 | Shared (계약) |
+| [UnitGenerator](../../libraries/unitgenerator/) | `[UnitOf]` 빈 struct | 값 객체 본체 (동등성·연산자·포매터·컨버터·`Parse`) | Shared |
+| [MasterMemory](../../libraries/mastermemory/) | `[MemoryTable]` 모델 | `MemoryDatabase`와 테이블별 타입드 쿼리 | Shared |
+| [ZLogger](../../libraries/zlogger/) | `[ZLoggerMessage]` partial 메서드 | UTF8 직접 기록 로그 본문 | Server.Common · RoomServer · BotServer |
+| [ConsoleAppFramework](../../libraries/consoleappframework/) | `ConsoleApp.Create()` 호출부와 커맨드 메서드 | 파서·도움말·디스패처 전체 | Cli |
+| [MemoryPack](../../libraries/memorypack/) | `[MemoryPackable]` 타입 | 타입별 포매터 | Server.Common |
+
+공통점이 하나 보입니다. 입력이 전부 **선언**입니다. 빈 struct, partial 메서드 시그니처, 애트리뷰트 붙은 record. 개발자는 "무엇이 있는지"만 말하고, "어떻게 하는지"는 생성물이 채웁니다.
+
+## 배선이 필요한 곳, 필요 없는 곳
+
+7개 중 6개는 배선 코드가 없습니다. `[UnitOf]`를 붙이면 그 struct 자체가 완성되고, `[MessagePackObject]`의 포매터는 리졸버 체인이 자동 발견하며([MessagePack 페이지](../../libraries/messagepack/)의 v3 이야기), `[ZLoggerMessage]`는 자기 partial 메서드의 본문이 됩니다. 선언한 자리가 곧 설치된 자리입니다.
+
+예외가 MagicOnion의 클라이언트 프록시입니다. 계약은 인터페이스라서 "이 인터페이스들의 구현을 만들어 달라"고 스캔 대상을 알려 줄 마커가 필요합니다.
+
+```csharp
+// The bot connects through pre-generated proxies rather than runtime code generation: the dynamic
+// client cannot emit a receiver that carries a client result, and the duel hub's rematch offer is one.
+// The type is only a marker for the assembly to scan: every contract in Shared gets a client.
+[MagicOnionClientGeneration(typeof(IStatusService))]
+internal partial class MagicOnionClientInitializer;
+```
+
+<SourceLink path="src/SharpCampus.BotServer/MagicOnionClientInitializer.cs" />
+
+BotServer의 마커에는 이 프로젝트에서 사전 생성이 **선택이 아닌 필수**가 되는 지점이 적혀 있습니다. 런타임 생성 클라이언트는 Client Results가 실린 허브 리시버를 만들어 내지 못하는데, 듀얼 허브의 재대결 제안이 바로 그 기능을 씁니다. 반면 ApiServer의 A→B 클라이언트에는 마커가 없습니다. `IRoomControlService`는 `Shared.Internal`에 살아 어느 마커의 스캔 범위에도 들지 않고, 서버 프로세스는 런타임 코드 생성이 자유로운 환경이라 기본 경로로 충분하기 때문입니다. 같은 스택 안에서도 "어디까지 미리 만들어 두는가"는 실행 환경이 정합니다.
+
+## 패키지 참조에도 흔적이 남는다
+
+제너레이터가 컴파일러의 부품이라는 사실은 csproj에서도 읽힙니다. 계약 프로젝트의 UnitGenerator 참조입니다.
+
+```xml
+    <PackageReference Include="UnitGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+```
+
+<SourceLink path="src/SharpCampus.Shared/SharpCampus.Shared.csproj" />
+
+`analyzers`가 실제 배달물이고, `PrivateAssets=all`은 이 참조가 빌드에만 쓰이고 참조하는 쪽으로 전이되지 않는다는 선언입니다. 컴파일이 끝나면 UnitGenerator는 산출물 어디에도 없습니다. 생성된 코드만 어셈블리에 남습니다. 이 형태의 극단이 [ConsoleAppFramework](../../libraries/consoleappframework/)입니다. 런타임 어셈블리 자체가 없어서 의존성 목록에 아예 등장하지 않습니다. MessagePack·MemoryPack·MasterMemory는 런타임 라이브러리와 제너레이터가 한 패키지에 함께 들어 있는 혼합형입니다.
+
+## 남는 것: 반복 없는 계약
+
+생성물 7개를 한 발 떨어져 보면 전부 같은 문제를 풀고 있습니다. **계약과 구현 사이의 기계적 반복**입니다. DTO를 선언했으면 포매터는 따라 나오는 것이 맞고, 인터페이스를 선언했으면 프록시도, 로그 템플릿을 선언했으면 기록 코드도 그렇습니다. 이 반복을 사람이 쓰면 타이핑 비용보다 **불일치 비용**이 큽니다. 선언을 고치고 구현 갱신을 잊는 순간 런타임 버그가 되기 때문입니다. 컴파일마다 다시 생성되는 코드에는 그 불일치가 존재할 수 없습니다.
+
+그래서 이 스택에서 소스 제너레이터는 성능 기법이라기보다 **계약을 유일한 진실로 만드는 장치**에 가깝습니다. 성능은 그 위에 따라오는 상금입니다.
+
+## 더 보기
+
+- [MessagePack-CSharp](../../libraries/messagepack/): 리플렉션·IL 방출에서 소스 제너레이터 기본으로 넘어온 v3의 전환
+- [UnitGenerator](../../libraries/unitgenerator/): 선언 한 줄이 받는 생성물이 가장 많은 사례
+- [ConsoleAppFramework](../../libraries/consoleappframework/): 런타임 의존성 0이라는 극단형

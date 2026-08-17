@@ -1,0 +1,21 @@
+---
+import { REPO_BLOB_URL } from '../source-ref';
+
+interface Props {
+  /** Repository-relative path, e.g. `src/SharpCampus.RoomServer/Program.cs`. */
+  path: string;
+  from?: number;
+  to?: number;
+  label?: string;
+}
+
+const { path, from, to, label } = Astro.props;
+
+const hash = from === undefined ? '' : to === undefined ? `#L${from}` : `#L${from}-L${to}`;
+const lines = from === undefined ? '' : to === undefined ? `:${from}` : `:${from}-${to}`;
+
+const href = `${REPO_BLOB_URL}/${path}${hash}`;
+const text = label ?? `${path}${lines}`;
+---
+
+<a href={href} target="_blank" rel="noopener noreferrer">{text}</a>

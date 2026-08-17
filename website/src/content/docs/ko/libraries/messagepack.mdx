@@ -1,0 +1,86 @@
+---
+title: MessagePack-CSharp
+description: 모든 MagicOnion 호출의 페이로드를 담당하는 바이너리 직렬화기. 계약 애트리뷰트, v3 소스 제너레이터, 리졸버 구성까지 다룹니다.
+sidebar:
+  order: 3
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MessagePack은 "JSON처럼 쓰지만 더 작고 빠른" 바이너리 직렬화 포맷이고, MessagePack-CSharp은 그 C# 구현입니다. [MagicOnion](../magiconion/)이 기본 직렬화기로 채택하고 있어서, 이 프로젝트의 모든 RPC 페이로드(매 틱 브로드캐스트되는 보드 델타까지)가 이 포맷으로 나갑니다. 버전은 3.1.8입니다.
+
+- GitHub: [MessagePack-CSharp/MessagePack-CSharp](https://github.com/MessagePack-CSharp/MessagePack-CSharp)
+- 포맷 스펙: [msgpack.org](https://msgpack.org/)
+
+## 왜 쓰나
+
+JSON은 필드 이름을 매번 문자열로 싣고, 숫자도 텍스트로 싣습니다. MessagePack은 값을 타입 태그가 붙은 바이너리로 싣고, C# 구현의 기본 방식은 필드 이름을 아예 싣지 않습니다(아래 `Key` 참고). 초당 20틱으로 두 보드의 변화를 밀어 넣는 게임 서버에서는 이 페이로드 크기와 인코딩 속도 차이가 그대로 대역폭과 CPU가 됩니다.
+
+그리고 생태계 사정이 있습니다. MessagePack-CSharp은 MagicOnion과 같은 개발자 계열(Cysharp/neuecc)의 라이브러리라 통합이 매끄럽고, Unity까지 포함한 AOT 환경 대응이 소스 제너레이터로 준비되어 있습니다. MagicOnion을 골랐다면 직렬화기는 사실상 함께 따라오는 선택입니다.
+
+## 계약 애트리뷰트: Key 번호가 곧 프로토콜
+
+직렬화 대상 타입에 `[MessagePackObject]`를 붙이고 각 멤버에 `[Key(n)]`으로 순번을 줍니다. 매 틱 나가는 델타 계약이 이렇게 생겼습니다.
+
+```csharp
+[MessagePackObject]
+public sealed record TickDelta(
+    [property: Key(0)] TickNumber Tick,
+    [property: Key(1)] PlayerDelta[] Players,
+    [property: Key(2)] DuelEvent[] Events);
+```
+
+<SourceLink path="src/SharpCampus.Shared/Duel/TickDelta.cs" />
+
+positional record라서 `[property: Key(0)]` 형태로 생성자 매개변수에 붙이면 생성되는 프로퍼티에 애트리뷰트가 전달됩니다. 와이어에서 이 타입은 필드 이름 없는 3칸짜리 배열입니다. 개념적으로는 이렇습니다.
+
+```text
+[tick, [player0, player1], [event, event, ...]]
+```
+
+이름이 없으니 `Key` 번호가 곧 프로토콜입니다. 번호를 바꾸거나 재사용하면 서버와 클라이언트가 서로 다른 해석을 하게 되므로, 계약 변경은 번호 끝에 추가하는 방향이 안전합니다. 반대로 멤버 이름 바꾸기는 와이어에 아무 영향이 없습니다.
+
+## v3 소스 제너레이터: 코드 무변경 AOT
+
+예전 MessagePack-CSharp은 런타임에 IL을 생성해 포매터를 만들었습니다. 빠르지만, IL 생성이 금지된 AOT 환경(Unity IL2CPP 등)에서는 별도 코드 생성 도구를 돌려야 했습니다. v3부터는 **소스 제너레이터가 기본**입니다. `[MessagePackObject]` 타입을 컴파일하면 포매터가 그 자리에서 생성되고, 어셈블리마다 생성물을 묶는 `GeneratedMessagePackResolver`가 함께 만들어집니다.
+
+배선 코드는 없습니다. 생성된 리졸버는 어셈블리 애트리뷰트로 표시되고, 기본 리졸버 체인이 이를 자동으로 발견해 우선 사용합니다. 그래서 이 프로젝트 어디에도 `GeneratedMessagePackResolver`를 등록하는 코드가 보이지 않지만, 계약 타입의 직렬화는 전부 컴파일 타임 생성 코드로 돕니다.
+
+## 리졸버 구성: 한 곳에서
+
+직렬화 옵션은 계약을 쓰는 모든 프로세스가 똑같이 맞춰야 하는 값이라, `SharpCampus.Shared`의 정적 클래스 한 곳에 모았습니다.
+
+```csharp
+public static MessagePackSerializerOptions Options { get; } = MessagePackSerializerOptions.Standard
+    .WithResolver(CompositeResolver.Create(
+        [new UlidMessagePackFormatter()],
+        [StandardResolver.Instance]));
+
+public static IMagicOnionSerializerProvider Provider { get; } =
+    MessagePackMagicOnionSerializerProvider.Default.WithOptions(Options);
+```
+
+<SourceLink path="src/SharpCampus.Shared/Serialization/ContractSerialization.cs" />
+
+`CompositeResolver.Create`는 "먼저 이 포매터들, 없으면 이 리졸버들" 순서로 조회하는 리졸버를 만듭니다. 여기서 추가하는 것은 `Ulid.MessagePack` 패키지의 Ulid 포매터 하나뿐입니다. `RoomId`가 Ulid를 감싸는 값 객체인데, 그 생성 포매터가 내부 값을 직렬화하려고 리졸버에 Ulid 포매터를 요청하고, 표준 리졸버는 서드파티 타입인 Ulid를 모르기 때문입니다.
+
+`Provider`는 이 옵션을 MagicOnion에 장착하는 어댑터입니다. 설치 지점은 3형태입니다.
+
+| 위치 | 방법 |
+| --- | --- |
+| 서버 (ApiServer·RoomServer) | `AddMagicOnion(options => options.MessageSerializer = ContractSerialization.Provider)` |
+| 클라이언트 (콘솔 클라·CLI·BotServer) | 시작 시 `MagicOnionSerializerProvider.Default = ContractSerialization.Provider` 전역 설정 |
+| 서버 간 클라이언트 | `MagicOnionClient.Create<T>(channel, ContractSerialization.Provider)` 명시 전달 |
+
+어느 한 프로세스만 옵션이 다르면 같은 바이트를 서로 다르게 읽게 되므로, "한 곳에 정의하고 전부 거기서 가져온다"가 이 클래스의 존재 이유입니다.
+
+## 값 객체와 마스터 데이터
+
+이 프로젝트의 ID·수치 타입(`UserId`, `RoomId`, `TickNumber`, `Coins` 등)은 UnitGenerator로 만든 값 객체인데, 생성 옵션에 `MessagePackFormatter`가 들어 있어 전용 포매터가 함께 생성됩니다. 덕분에 값 객체는 와이어에서 구조체 포장 없이 **감싼 프리미티브 그대로** 나갑니다. `TickNumber`는 그냥 정수 하나입니다. 값 객체 이야기는 [UnitGenerator 페이지](../unitgenerator/)에서 이어집니다.
+
+MessagePack의 쓰임은 RPC 밖에도 하나 있습니다. 게임 상수를 담는 MasterMemory의 데이터 바이너리도 MessagePack 포맷이라, 계약과 마스터 데이터가 같은 직렬화 기반을 공유합니다. 이쪽은 [MasterMemory 페이지](../mastermemory/)의 몫입니다.
+
+## 더 보기
+
+- [MagicOnion](../magiconion/): 이 직렬화기가 실려 다니는 RPC 프레임워크
+- [아키텍처 개요](../../architecture/): 이 계약들이 오가는 경로 3종

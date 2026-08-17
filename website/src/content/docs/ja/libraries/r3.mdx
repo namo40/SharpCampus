@@ -1,0 +1,84 @@
+---
+title: R3
+description: Rx をゼロから設計し直したリアクティブライブラリ。ボットの知覚(ティック差分)と判断(入力プラン)を 1 本の宣言的パイプラインでつなぎます。
+sidebar:
+  order: 6
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+R3 は Rx (Reactive Extensions) を現代の .NET に合わせてゼロから設計し直したライブラリです。UniRx と dotnet/reactive を作り維持してきた開発者(neuecc)がその経験の上に築いた新世代で、`Observable<T>` はインターフェースではなく抽象クラス、スケジューリングは .NET 標準の `TimeProvider` の上に載っています。SharpCampus では BotServer が使います。キューに相手がいないときに[召喚されるボット](../../architecture/matchmaking/)のプレイ全体が、R3 のパイプライン 1 本です。バージョンは 1.3.1 です。
+
+- GitHub: [Cysharp/R3](https://github.com/Cysharp/R3)
+
+## なぜ使うのか
+
+ボットのプレイは本質が「イベントへの反応」です。自分のボードに新しいピースがスポーンしたら、ボードを読んでどこに置くかを計画し、その計画を複数入力のバーストに変えて、人の手の速さで 1 つずつサーバーへ送ります。そしてバーストの最後のハードドロップが次のスポーンを起こすので、このサイクルがマッチの終わりまで繰り返されます。
+
+これをコールバックと手書きタイマーで書くと、「スポーン待ち → 計画 → 送信タイマー → キャンセル処理」が状態機械として散らばります。R3 で書くと**ストリーム変換の連鎖 1 本**になり、購読 1 つを dispose するだけで進行中のタイマーまで全部片付きます。
+
+## 知覚: 差分ストリーム
+
+ボットのレシーバーは、ルームが押してくるティック差分をローカルレプリカに反映してから、同じ差分を `Subject<TickDelta>` に流します。
+
+```csharp
+private readonly Subject<TickDelta> _deltas = new();
+
+// ...
+
+public Observable<TickDelta> Deltas => _deltas;
+
+// ...
+
+public void OnTickDelta(TickDelta delta)
+{
+    lock (_gate)
+    {
+        Replica.ApplyTickDelta(delta);
+    }
+
+    _deltas.OnNext(delta);
+}
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotReceiver.cs" />
+
+レプリカを先に更新してから push する順序が契約です。購読者が差分を受けてボードを読めば、いま知らされたそのティックのボードが見えます。
+
+## 判断: パイプライン全文
+
+ボットのプレイ全体がこの 1 つの式です。
+
+```csharp
+using var play = Resumed(receiver, seat)
+    .Concat(Spawns(receiver, seat))
+    .Select(_ => receiver.Read(
+        seat,
+        static (index, replica) => BotPlanner.Plan(replica.Boards[index.AsPrimitive()])))
+    .Where(static plan => plan.Length > 0)
+    .SelectMany(plan => Paced(plan, cadence))
+    .SubscribeAwait(hub, static (input, room, _) => new ValueTask(room.SendInputsAsync([input])));
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotPlayer.cs" />
+
+上から読むとこうなります。
+
+1. **`Resumed`**: 着席時にすでにピースが落ちていれば(スポーンを見逃した再開の状況)`Observable.Return` で 1 回だけ発火し、そうでなければ `Observable.Empty`。`Concat` でスポーンストリームの前につなぎます。
+2. **`Spawns`**: 差分ストリームから自分の席の `PieceSpawned` イベントだけを濾したストリーム。
+3. **`Select`**: スポーンごとにボードを読み、`BotPlanner` が着地プラン(入力の配列)を立てます。
+4. **`SelectMany(Paced(...))`**: プランを一度に流し込まず、`Observable.Zip(plan.ToObservable(), Observable.Interval(cadence, time))` で拍に合わせて入力を 1 つずつ流します。
+5. **`SubscribeAwait`**: 入力ごとにハブ呼び出し(`SendInputsAsync`)を await する非同期購読です。
+
+バーストの終わりは必ずハードドロップで、ハードドロップが次のスポーンを生むので、プラン 2 つが同時に飛んでいることは構造的にあり得ません。
+
+## R3 らしいディテール 2 つ
+
+**クロージャのない演算子。** パイプラインのラムダが `static` なのに気づくと思いますが、R3 の演算子には `Where(state, static (x, s) => ...)` のように状態を引数で渡すオーバーロードがあります。差分ごとに回る経路からクロージャ割り当てが消えます。
+
+**時間は `TimeProvider` のもの。** `Observable.Interval(cadence, time)` の `time` は DI で注入された `TimeProvider` です。ペースがストリームの持ち物なので購読を dispose すればタイマーも一緒に止まり、テストでは偽の `TimeProvider` で時間を巻いて回せます。
+
+## あわせて読む
+
+- [マッチメイキング](../../architecture/matchmaking/): このボットが召喚される経路(ボットフォールバック)
+- [MagicOnion](../magiconion/): パイプラインの先で入力を運ぶ StreamingHub

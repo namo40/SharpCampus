@@ -1,0 +1,115 @@
+---
+title: "Part 1: Run from Source"
+description: Bring up auth, the database and Redis in containers, run the three servers from source, and play your first match.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import SourceLink from '../../../components/SourceLink.astro';
+
+This is the workflow right after cloning. Every server runs under `dotnet run`, so edit-and-restart stays as fast as it gets. By the end you will have played a match against the bot, locally.
+
+## 1. Bring up auth and the database
+
+Accounts live in Supabase Auth, so its local stack comes first. Postgres and the auth API start in Docker, and the servers and client are already configured for the local demo keys this stack prints.
+
+```bash
+supabase start
+```
+
+The matchmaking queue and the room registry live in Redis, which the Supabase stack does not include. Run one alongside it:
+
+```bash
+docker run -d --name sharpcampus-redis -p 6379:6379 redis:8
+```
+
+Profiles and match history live in the same Postgres, in tables of the game's own. The schema is the single file <SourceLink path="deploy/db/schema.sql" />, and it drops the tables before recreating them — running the same command again is how you reset the database.
+
+<Tabs>
+  <TabItem label="PowerShell">
+    ```powershell
+    Get-Content deploy/db/schema.sql | docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres
+    ```
+  </TabItem>
+  <TabItem label="POSIX shell">
+    ```bash
+    docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/schema.sql
+    ```
+  </TabItem>
+</Tabs>
+
+## 2. Game balance lives in masterdata/
+
+Tick rate, the gravity curve, attack and combo tables, payouts and rating constants, skins and missions — every game number is JSON in the `masterdata/` folder (for example <SourceLink path="masterdata/game_config.json" />). The servers read those files at startup, so editing a value and restarting is a balance patch. A tool exists to compile them into the database a container image ships with, but a local run needs none of that.
+
+## 3. Run the three servers
+
+One terminal each:
+
+```bash
+dotnet run --project src/SharpCampus.ApiServer
+```
+
+```bash
+dotnet run --project src/SharpCampus.RoomServer
+```
+
+```bash
+dotnet run --project src/SharpCampus.BotServer
+```
+
+- **ApiServer** — account checks, profiles, the shop and missions, matchmaking. The first thing a client talks to.
+- **RoomServer** — one match, one room, simulated on a server-authoritative tick loop.
+- **BotServer** — when someone waits in the queue too long, it signs a bot in and sends it into the same queue.
+
+Each server opens an operations HTTP port beside its client-facing gRPC one (5011, 5012, 5013). `/healthz` answers for as long as the process lives, `/readyz` also checks the Redis and Postgres connections, and `/metrics` is a Prometheus scrape.
+
+## 4. Your first match
+
+The game client takes the whole terminal:
+
+```bash
+dotnet run --project src/SharpCampus.Client
+```
+
+Pick **Play as guest** on the title screen and you are in the lobby, no email required. **Play a duel** joins the queue (Esc leaves it), and under the development settings a bot turns up as your opponent after about fifteen seconds. The bot signed in with an account of its own and queued through the same three calls you did — to the server it is just another client.
+
+| Key | Action |
+| --- | --- |
+| ← / → | move |
+| ↓ | soft drop |
+| Z / X | rotate |
+| Space | hard drop |
+| C | hold |
+| Q | forfeit |
+
+When the match ends, coins and rating settle to both profiles, and answering the rematch offer either way returns you to the lobby.
+
+## 5. Walk the server API in the REPL
+
+The other client, `SharpCampus.Cli`, is a REPL that exposes every server call the game makes as one command each. Reach for it when you want to see what the game client is calling underneath.
+
+```bash
+dotnet run --project src/SharpCampus.Cli
+```
+
+```text
+cli> guest
+cli> whoami
+cli> nickname boardsweeper
+cli> duel
+cli> history
+cli> rank
+```
+
+`guest` signs in anonymously and stores a session file; `whoami` sends that token to the ApiServer and gets the account and profile behind it. `duel` rides exactly the game's path, from queueing to the duel screen. `help` lists every command.
+
+## 6. Clean up
+
+```bash
+supabase stop
+docker rm -f sharpcampus-redis
+```
+
+Next is [Part 2: Docker Compose](../docker-compose/) — the same servers, this time in the shape they deploy in, behind containers and a single entry point.

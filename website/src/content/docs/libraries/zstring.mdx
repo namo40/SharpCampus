@@ -1,0 +1,94 @@
+---
+title: ZString
+description: Zero-allocation string building on buffers rented from ArrayPool. The console renderer drawing 20 full frames a second is the case study.
+sidebar:
+  order: 10
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+ZString is a Cysharp library that removes the intermediate allocations from string building. It offers a struct builder that writes into buffers rented from `ArrayPool`, plus `Concat` and `Format` that join arguments without temporary strings. In this project, the console client's board renderer is the main user. The version is 2.6.0.
+
+- GitHub: [Cysharp/ZString](https://github.com/Cysharp/ZString)
+
+## Why this library
+
+Every time a server delta arrives, the console client assembles the entire screen — both boards, the HUD, the key legend — into a single string and redraws it, 20 times a second. If every cell were appended with `+` or interpolation, each frame would produce hundreds of short-lived garbage strings, and collecting them shows up as tiny hitches between frames. ZString's builder only writes into a rented buffer and allocates exactly once, at the final `ToString()` — so a frame's allocations shrink to the one result string.
+
+The server side stands on the same technique, incidentally: ZLogger builds on ZString's formatting engine lineage, a story the [ZLogger page](../zlogger/) covers.
+
+## Assembling a frame: the struct builder
+
+The renderer creates one builder per frame and stacks the whole screen into it:
+
+```csharp
+        // The builder is a mutable struct passed by ref, which rules out a using declaration.
+        var frame = ZString.CreateStringBuilder();
+        try
+        {
+            AppendHeader(ref frame, Strings.BoardHeaderYou, displayNames[seat]);
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelRenderer.cs" />
+
+The `Utf16ValueStringBuilder` returned by `CreateStringBuilder()` is not a class but a **mutable struct**. The moment it gets copied, there are two divergent buffer states — so it is passed by `ref` to every internal method that shares the assembly work. And since a variable declared with `using var` is read-only and cannot be passed by `ref`, the method returns the buffer with try/finally instead of a using declaration:
+
+```csharp
+            return frame.ToString();
+        }
+        finally
+        {
+            frame.Dispose();
+        }
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelRenderer.cs" />
+
+`Dispose()` is the hand-back point that returns the rented buffer to the pool. The methods sharing the assembly work look like this:
+
+```csharp
+    // A color code goes in only where the color changes, which keeps a frame from carrying one per cell.
+    private static void AppendCell(ref Utf16ValueStringBuilder frame, ref string painted, string color, string glyph)
+    {
+        if (painted != color)
+        {
+            frame.Append(color.Length > 0 ? color : Reset);
+            painted = color;
+        }
+
+        frame.Append(glyph);
+    }
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelRenderer.cs" />
+
+This is the hottest path — 400 cells across two boards, 20 times a second — and `Append` only writes into the buffer, so nothing allocates in here. Combined with the design of assembling the frame whole and writing it once over the previous one, the two boards on screen always belong to the same tick, and drawing costs one string.
+
+## One-shot joins: Concat
+
+Places that don't warrant a builder use `ZString.Concat`. One is the output point that sends the finished frame out together with the cursor-home sequence and the notice line:
+
+```csharp
+    private void Draw()
+    {
+        var frame = receiver.Read(renderer, static (r, replica) => r.BuildFrame(replica));
+        Console.Out.Write(ZString.Concat(CursorHome, frame, _notice));
+    }
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelSession.cs" />
+
+Another is the rematch countdown prompt, which rewrites the same line every second — again joined without temporary strings:
+
+```csharp
+                Console.Out.Write(ZString.Concat("\r", Localization.Format(CommonStrings.RematchPrompt, remaining), "   "));
+```
+
+<SourceLink path="src/SharpCampus.Client/Duel/DuelFlow.cs" />
+
+`Concat` formats its arguments into an internal buffer one after another and produces only the single result string. What sets it apart from `string.Concat` is that a value-type argument like an `int` is written straight into the buffer, with no boxing and no intermediate `ToString()`.
+
+## See also
+
+- [Getting Started](../../getting-started/): where to actually bring up the screen this renderer draws
+- [Architecture overview](../../architecture/): the path the tick deltas, the frame's raw material, arrive by

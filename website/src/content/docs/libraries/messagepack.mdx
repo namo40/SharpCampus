@@ -1,0 +1,86 @@
+---
+title: MessagePack-CSharp
+description: The binary serializer under every MagicOnion call. Contract attributes, the v3 source generator, and the resolver setup.
+sidebar:
+  order: 3
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+MessagePack is a binary serialization format — "like JSON, but smaller and faster" — and MessagePack-CSharp is its C# implementation. [MagicOnion](../magiconion/) adopts it as the default serializer, so every RPC payload in this project, down to the board deltas broadcast each tick, travels in this format. The version is 3.1.8.
+
+- GitHub: [MessagePack-CSharp/MessagePack-CSharp](https://github.com/MessagePack-CSharp/MessagePack-CSharp)
+- Format spec: [msgpack.org](https://msgpack.org/)
+
+## Why this library
+
+JSON carries every field name as a string on every message, and numbers as text. MessagePack carries values as type-tagged binary, and the C# implementation's default mode skips field names entirely (see `Key` below). For a game server pushing two boards' worth of changes 20 times a second, those payload and encoding differences translate directly into bandwidth and CPU.
+
+There is also an ecosystem reality: MessagePack-CSharp comes from the same developer lineage as MagicOnion (Cysharp/neuecc), so the integration is seamless, and AOT support — Unity included — is handled by a source generator. Once you pick MagicOnion, the serializer effectively comes with it.
+
+## Contract attributes: the Key numbers are the protocol
+
+A serializable type gets `[MessagePackObject]`, and each member gets an index via `[Key(n)]`. The delta contract sent every tick:
+
+```csharp
+[MessagePackObject]
+public sealed record TickDelta(
+    [property: Key(0)] TickNumber Tick,
+    [property: Key(1)] PlayerDelta[] Players,
+    [property: Key(2)] DuelEvent[] Events);
+```
+
+<SourceLink path="src/SharpCampus.Shared/Duel/TickDelta.cs" />
+
+These are positional records, so the `[property: Key(0)]` form forwards the attribute from the constructor parameter to the generated property. On the wire, this type is a three-slot array with no field names — conceptually:
+
+```text
+[tick, [player0, player1], [event, event, ...]]
+```
+
+With no names, the `Key` numbers *are* the protocol. Renumbering or reusing an index makes the server and client read the same bytes differently, so contract changes should append at the end. Renaming a member, on the other hand, changes nothing on the wire.
+
+## The v3 source generator: AOT with no code changes
+
+Earlier MessagePack-CSharp built formatters by emitting IL at runtime — fast, but AOT environments that forbid IL emission (Unity IL2CPP among them) required running a separate code generation tool. From v3, **the source generator is the default**: compiling a `[MessagePackObject]` type generates its formatter on the spot, along with a per-assembly `GeneratedMessagePackResolver` that bundles them.
+
+There is no wiring code. The generated resolver is marked with an assembly attribute, and the default resolver chain discovers it automatically and prefers it. That is why nowhere in this project registers `GeneratedMessagePackResolver` — yet every contract type serializes through compile-time generated code.
+
+## Resolver setup: one place
+
+Serialization options are something every process speaking the contracts must agree on, so they live in one static class in `SharpCampus.Shared`:
+
+```csharp
+public static MessagePackSerializerOptions Options { get; } = MessagePackSerializerOptions.Standard
+    .WithResolver(CompositeResolver.Create(
+        [new UlidMessagePackFormatter()],
+        [StandardResolver.Instance]));
+
+public static IMagicOnionSerializerProvider Provider { get; } =
+    MessagePackMagicOnionSerializerProvider.Default.WithOptions(Options);
+```
+
+<SourceLink path="src/SharpCampus.Shared/Serialization/ContractSerialization.cs" />
+
+`CompositeResolver.Create` builds a resolver that consults "these formatters first, then these resolvers." The only addition here is the Ulid formatter from the `Ulid.MessagePack` package: `RoomId` is a value object wrapping a Ulid, its generated formatter asks the resolver for a Ulid formatter to serialize the inner value, and the standard resolver doesn't know the third-party Ulid type.
+
+`Provider` adapts these options onto MagicOnion. Installation happens in three shapes:
+
+| Where | How |
+| --- | --- |
+| Servers (ApiServer, RoomServer) | `AddMagicOnion(options => options.MessageSerializer = ContractSerialization.Provider)` |
+| Clients (console client, CLI, BotServer) | `MagicOnionSerializerProvider.Default = ContractSerialization.Provider` at startup |
+| Server-to-server clients | passed explicitly: `MagicOnionClient.Create<T>(channel, ContractSerialization.Provider)` |
+
+If even one process configures differently, the same bytes read differently on each end — "define once, everyone imports it" is this class's whole reason to exist.
+
+## Value objects and master data
+
+This project's ID and quantity types (`UserId`, `RoomId`, `TickNumber`, `Coins`, and so on) are value objects built with UnitGenerator, and their generation options include `MessagePackFormatter`, so a dedicated formatter is generated alongside each one. As a result a value object crosses the wire as **the bare primitive it wraps**, with no struct envelope — a `TickNumber` is just one integer. The value-object story continues on the [UnitGenerator page](../unitgenerator/).
+
+MessagePack has one job outside RPC here as well: the MasterMemory binary holding the game constants is MessagePack too, so contracts and master data share one serialization foundation. That side belongs to the [MasterMemory page](../mastermemory/).
+
+## See also
+
+- [MagicOnion](../magiconion/): the RPC framework these payloads ride on
+- [Architecture overview](../../architecture/): the three call paths these contracts travel

@@ -1,0 +1,5 @@
+# npm and asciinema always regenerate these with LF; keep them LF across checkouts
+package-lock.json text eol=lf
+*.cast text eol=lf
+
+*.mp4 binary

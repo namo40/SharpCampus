@@ -1,0 +1,49 @@
+---
+title: Libraries
+description: A guided map of the 14 MagicOnion and Cysharp libraries the reference server uses.
+sidebar:
+  label: Overview
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+SharpCampus is a reference server that weaves MagicOnion and the Cysharp ecosystem libraries into a working whole. This section explains one library per page, in the order of "what it is → why it's here → where and how this project uses it → code links." When you want to see where a piece sits in the bigger structure, the [architecture section](../architecture/) is the map.
+
+## Communication
+
+<CardGrid>
+  <LinkCard title="MagicOnion" href="magiconion/" description="The RPC framework where a C# interface is the protocol. Unary, StreamingHub, server-to-server calls, Client Results, Heartbeat." />
+  <LinkCard title="MessagePack-CSharp" href="messagepack/" description="Binary serialization for every RPC payload. Contract attributes and the v3 source generator." />
+</CardGrid>
+
+## Game logic
+
+<CardGrid>
+  <LinkCard title="LogicLooper" href="logiclooper/" description="A room as a loop action, not a thread. One thread per core runs every room at 20 ticks per second." />
+  <LinkCard title="MessagePipe" href="messagepipe/" description="In-process messaging carrying match results to the settlement and mission subscribers, keeping side effects out of the tick loop." />
+  <LinkCard title="R3" href="r3/" description="The new generation of Rx. The bot's perception and decisions as one declarative pipeline." />
+  <LinkCard title="MasterMemory" href="mastermemory/" description="A read-only in-memory database for game constants: generated typed queries, validation at startup." />
+</CardGrid>
+
+## Values and performance
+
+<CardGrid>
+  <LinkCard title="UnitGenerator" href="unitgenerator/" description="ID and quantity primitives as value objects from one-line declarations. Option combinations and the wire/DB boundary integrations." />
+  <LinkCard title="Ulid" href="ulid/" description="An identifier that sorts by creation time. How RoomId and MatchId are handled at every boundary." />
+  <LinkCard title="ZString" href="zstring/" description="Zero-allocation string building on ArrayPool buffers. The console renderer drawing 20 frames a second." />
+  <LinkCard title="ZLinq" href="zlinq/" description="Allocation-free LINQ. The one-call drop-in, and the boundary with EF queries." />
+  <LinkCard title="MemoryPack" href="memorypack/" description="The zero-encoding serializer. Chosen for a Redis cache only servers read and write." />
+</CardGrid>
+
+## Tools
+
+<CardGrid>
+  <LinkCard title="ZLogger" href="zlogger/" description="Zero-allocation structured logging writing three servers' logs straight in UTF8. The ZLoggerMessage source generator and JSON console output." />
+  <LinkCard title="ConsoleAppFramework" href="consoleappframework/" description="The verification CLI where one method is one command. Source-generator only, so no runtime dependency." />
+  <LinkCard title="DFrame" href="dframe/" description="Distributed load testing with bots riding as virtual players. One whole match per execution." />
+</CardGrid>
+
+:::note[The two pillars not here: UniTask and YetAnotherHttpHandler]
+Two Cysharp libraries that pair with a Unity client make no appearance in this project. [UniTask](https://github.com/Cysharp/UniTask) is a zero-allocation async/await implementation fitted to Unity's player loop, and [YetAnotherHttpHandler](https://github.com/Cysharp/YetAnotherHttpHandler) is the HTTP handler that lets Unity speak gRPC (HTTP/2). This project's client is a .NET console app, where standard async/await and the default HTTP stack are enough — so neither had a place. The day a Unity client is attached, these are the first two packages to arrive.
+:::

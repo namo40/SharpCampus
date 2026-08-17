@@ -1,0 +1,113 @@
+---
+title: ZLogger
+description: 세 서버의 로그를 UTF8로 직접 쓰는 제로 할당 구조화 로거. ZLoggerMessage 소스 제너레이터와 JSON 콘솔 출력을 다룹니다.
+sidebar:
+  order: 13
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ZLogger는 `Microsoft.Extensions.Logging` 위에 세운 제로 할당 로거입니다. 로그를 UTF16 문자열로 만들었다가 출력 직전에 인코딩하는 대신, 처음부터 UTF8 바이트로 씁니다. 이 프로젝트의 세 서버(ApiServer·RoomServer·BotServer)가 남기는 로그는 전부 이 라이브러리를 거칩니다. 버전은 2.5.10입니다.
+
+- GitHub: [Cysharp/ZLogger](https://github.com/Cysharp/ZLogger)
+
+## 왜 쓰나
+
+로깅은 "항상 켜져 있는" 코드라서, 한 줄의 비용이 호출 횟수만큼 곱해집니다. 표준 파이프라인에서는 메시지 조립이 임시 문자열을 만들고, 값 타입 파라미터는 `object`로 박싱되고, 콘솔로 나갈 때 다시 UTF8 인코딩이 붙습니다. ZLogger는 이 경로를 통째로 바꿔서 파라미터를 UTF8 버퍼에 바로 기록합니다. 포매팅 엔진은 [ZString](../zstring/)의 기법을 UTF8로 이어받은 Utf8StringInterpolation입니다. 완성된 로그를 실제 싱크로 내보내는 일은 백그라운드 라이터 스레드가 비동기로 처리하므로, 20틱마다 도는 룸 서버의 핫 패스가 콘솔 I/O를 기다리는 일도 없습니다.
+
+그러면서도 별도 로깅 체계가 아니라 `Microsoft.Extensions.Logging`의 provider입니다. `ILogger<T>` 주입, 카테고리, 로그 레벨 필터 같은 ASP.NET Core의 로깅 관례가 전부 그대로 통합니다.
+
+## 구성: 세 서버가 같은 한 줄
+
+세 서버의 로깅 구성은 `Server.Common`의 확장 메서드 하나에 모여 있고, 각 서버의 `Program.cs`는 `builder.Logging.AddSharpCampusLogging()` 한 줄만 부릅니다.
+
+```csharp
+public static ILoggingBuilder AddSharpCampusLogging(this ILoggingBuilder logging)
+{
+    logging.ClearProviders();
+    logging.AddZLoggerConsole(options => options.UseJsonFormatter());
+
+    // The request start/finish log states of this category read the live HttpContext when their
+    // parameters are enumerated, and the json formatter enumerates them on ZLogger's background
+    // writer thread — concurrently with the request. That data race corrupts the request's feature
+    // cache (observed as a NullReferenceException inside routing under load), so these logs must
+    // never reach an asynchronous sink. Same failure class as
+    // https://github.com/dotnet/aspnetcore/issues/41924.
+    logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
+
+    return logging;
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Logging/LoggingBuilderExtensions.cs" />
+
+기본 콘솔 provider를 걷어내고 ZLogger 콘솔을 JSON 포매터로 답니다. 싱크가 stdout 하나뿐인 것은 의도입니다. 컨테이너 환경에서는 로그 수집·회전이 플랫폼의 몫이라, 프로세스는 표준 출력에 구조화된 줄을 쓰는 것까지만 책임집니다.
+
+중간의 필터는 이 파일에서 가장 배울 것이 많은 줄입니다. ASP.NET Core의 요청 시작/종료 로그(`Hosting.Diagnostics` 카테고리)는 로그 상태 객체가 파라미터를 열거하는 시점에 살아 있는 `HttpContext`를 읽습니다. 그런데 ZLogger의 JSON 포매터는 그 열거를 백그라운드 라이터 스레드에서 수행하므로, 요청을 처리 중인 스레드와 같은 `HttpContext`를 동시에 만지는 데이터 레이스가 됩니다(이 프로젝트에서는 부하 중 라우팅 내부의 `NullReferenceException`으로 관측됐습니다). 여기서 비동기 싱크의 일반 원칙이 나옵니다. 로그 상태는 로그를 남기는 그 순간에 값이 확정되어 있어야 하고, 나중에 열거될 때 살아 있는 객체를 읽는 로그는 비동기 싱크에 실으면 안 됩니다.
+
+## ZLoggerMessage: 로그 메서드를 컴파일 타임에
+
+호출부에서 문자열을 보간하는 대신, 이 프로젝트의 로그는 전부 `[ZLoggerMessage]`로 선언된 partial 메서드입니다. 형태는 .NET의 `LoggerMessage`와 같지만, 생성되는 본문이 UTF8 직접 기록입니다.
+
+```csharp
+public static partial class ServerLog
+{
+    [ZLoggerMessage(LogLevel.Information, "Server {serverName} {version} started")]
+    public static partial void ServerStarted(this ILogger logger, string serverName, string version);
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Logging/ServerLog.cs" />
+
+로그 선언은 서브시스템별 정적 클래스에 모여 있습니다. 공통 `ServerLog` 외에 `RoomLog`(룸 수명주기·드레이닝·정산 실패), `MatchmakingLog`(페어링·봇 소환), `BotLog`(봇 수명주기), `MasterDataLog`(기동 시 마스터데이터 요약)까지 다섯 곳입니다. 룸 쪽 선언 일부를 보면 이렇습니다.
+
+```csharp
+[ZLoggerMessage(LogLevel.Information, "Room {roomId} created with seed {seed}")]
+public static partial void RoomCreated(this ILogger logger, RoomId roomId, ulong seed);
+
+// ...
+
+[ZLoggerMessage(LogLevel.Information, "Room {roomId} finished at tick {tick}: {outcome} by {reason}")]
+public static partial void RoomFinished(
+    this ILogger logger,
+    RoomId roomId,
+    int tick,
+    DuelOutcome outcome,
+    MatchEndReason reason);
+
+// ...
+
+[ZLoggerMessage(LogLevel.Error, "Room {roomId} stopped ticking")]
+public static partial void RoomTickFaulted(this ILogger logger, Exception exception, RoomId roomId);
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/RoomLog.cs" />
+
+호출부는 `logger.RoomCreated(roomId, seed)` 한 줄이 됩니다. 이 방식의 이득은 성능만이 아닙니다. 메시지 템플릿과 파라미터 이름이 컴파일 타임에 고정되니 오타가 빌드 에러가 되고, 서버가 남길 수 있는 로그 문구 전체가 파일 다섯 개에 목록으로 남습니다. 예외는 `RoomTickFaulted`처럼 `Exception` 파라미터를 선언하면 프레임워크 규약대로 함께 기록됩니다.
+
+## JSON 출력: 파라미터가 곧 속성
+
+JSON 포매터를 달았으니 위 선언 하나가 실제로 남기는 줄은 이렇습니다(읽기 좋게 줄바꿈만 더했습니다).
+
+```json
+{
+  "Timestamp": "2026-08-17T18:23:53.9847292+09:00",
+  "LogLevel": "Information",
+  "Category": "SharpCampus.RoomServer.Rooms.RoomManager",
+  "Message": "Room 01K2N0Y6R1V9NXKQ4XH7SJ9F3A created with seed 1234567890",
+  "roomId": "01K2N0Y6R1V9NXKQ4XH7SJ9F3A",
+  "seed": 1234567890
+}
+```
+
+렌더링된 문장(`Message`)과 별개로, 템플릿의 각 파라미터가 이름 그대로 최상위 속성이 됩니다. 로그 수집기에서 `roomId`로 필터를 걸면 한 룸의 일생이 그대로 나오는 구조화 로깅입니다. 눈여겨볼 점 하나: `roomId`가 구조체 포장 없이 26자 텍스트입니다. [UnitGenerator](../unitgenerator/)가 값 객체에 생성해 둔 JsonConverter가 로그 직렬화에서도 일하고 있어서, [Ulid](../ulid/) 문자열이 와이어·DB에 이어 로그에서도 같은 표기로 나타납니다.
+
+## 어디에 쓰지 않나
+
+콘솔 클라이언트에는 ZLogger가 없습니다. 클라이언트의 콘솔은 로그가 아니라 게임 화면이 차지하는 자리라, 그쪽 출력은 Spectre.Console과 [ZString](../zstring/)의 몫입니다. 로깅은 "사람이 아니라 수집기가 읽는 출력"이 있는 서버 쪽 이야기입니다.
+
+## 더 보기
+
+- [ZString](../zstring/): 같은 포매팅 기법의 클라이언트 쪽 얼굴
+- [UnitGenerator](../unitgenerator/): 로그 속성에까지 이어지는 값 객체의 경계 통합
+- [LogicLooper](../logiclooper/): 위 로그들이 기록하는 룸 틱 루프

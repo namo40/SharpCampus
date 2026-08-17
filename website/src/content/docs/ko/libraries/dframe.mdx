@@ -1,0 +1,189 @@
+---
+title: DFrame
+description: 부하 시나리오를 C# 클래스로 쓰는 분산 부하 테스트 프레임워크. 봇을 그대로 가상 플레이어로 실어 매치 전체를 돌립니다.
+sidebar:
+  order: 15
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+import VideoClip from '../../../../components/VideoClip.astro';
+
+DFrame은 부하 테스트 시나리오를 C# 클래스(`Workload`)로 쓰는 분산 부하 테스트 프레임워크입니다. 컨트롤러가 웹 UI를 열고, 워커들이 컨트롤러에 접속해 지시받은 동시성만큼 Workload를 실행합니다. 워커 프로세스를 늘리면 부하도 수평으로 늘어나는 구조입니다. 이 프로젝트에서는 `tests/SharpCampus.LoadTest`가 매치메이킹·대전 경로와 랭킹 조회를 Workload 두 개로 두드립니다. 버전은 2.0.0입니다.
+
+- GitHub: [Cysharp/DFrame](https://github.com/Cysharp/DFrame)
+
+## 왜 쓰나
+
+범용 부하 도구는 대부분 HTTP 요청을 기술하는 데 맞춰져 있어서, 이 프로젝트의 트래픽(MagicOnion 위의 gRPC, MessagePack 페이로드, StreamingHub 실시간 세션)을 재현하려면 프로토콜을 도구 쪽에 다시 구현해야 합니다. DFrame은 시나리오가 그냥 C# 코드라서 실제 클라이언트가 쓰는 라이브러리(`MagicOnion.Client`, 계약 어셈블리)를 그대로 가져다 씁니다. 재현할 프로토콜이 없고, 부하의 모양이 실제 클라이언트의 모양과 같습니다.
+
+한 가지 재미있는 사실: DFrame 자체가 이 사이트가 다뤄 온 라이브러리들로 만들어져 있습니다. 패키지 의존성에 [MagicOnion](../magiconion/)(컨트롤러와 워커 사이 통신), [MessagePack](../messagepack/), [MessagePipe](../messagepipe/), [ConsoleAppFramework](../consoleappframework/)가 늘어서 있습니다. 이 스택으로 실전 도구를 지으면 어떤 모습이 되는지 보여주는 표본이기도 합니다.
+
+## 하니스: 봇이 곧 가상 플레이어
+
+하니스의 `Program.cs` 전문입니다.
+
+```csharp
+using DFrame;
+using MagicOnion.Serialization;
+using SharpCampus.BotServer.Bots;
+using SharpCampus.BotServer.Configuration;
+using SharpCampus.Shared.Serialization;
+
+// Every workload here is a client of the two servers, and every client it creates has to read the same
+// MessagePack shapes those servers write. DFrame's own controller-to-worker channel carries a serializer
+// of its own, so this does not disturb it.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// Web UI on the first port, workers connect on the second.
+var builder = DFrameApp.CreateBuilder(7312, 7313);
+
+builder.ConfigureServices(services =>
+{
+    services.Configure<BotServerOptions>(options =>
+    {
+        // The same switch the console client honours, so the one env var aims this harness at a direct
+        // server or at the deployed entry point alike.
+        if (Environment.GetEnvironmentVariable("SHARPCAMPUS_SERVER") is { Length: > 0 } server)
+        {
+            options.ApiServerAddress = server;
+        }
+
+        // A pool of this harness's own. Nicknames are unique across accounts, so virtual players cannot
+        // wear the names the bot server's accounts already hold.
+        options.EmailPattern = "loadtest{0}@sharpcampus.dev";
+        options.NicknamePattern = "load{0}";
+        options.Password = "sharpcampus-loadtest";
+
+        // The ceiling on concurrency: a virtual player holds one account for as long as it plays.
+        options.AccountPoolSize = 32;
+    });
+
+    services.AddSingleton(TimeProvider.System);
+    services.AddSingleton<IBotAuthClient, SupabaseBotAuthClient>();
+    services.AddSingleton<IBotProfileClient, ApiBotProfileClient>();
+    services.AddSingleton<BotAccountPool>();
+    services.AddSingleton<IBotRunner, BotPlayer>();
+});
+
+await builder.RunAsync();
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/Program.cs" />
+
+`DFrameApp.CreateBuilder(7312, 7313)`은 컨트롤러와 워커를 한 프로세스에 함께 띄우는 형태입니다. 첫 포트가 웹 UI, 둘째 포트가 워커 접속용이라, 부하를 더 얹고 싶으면 워커만 별도 프로세스로 더 붙일 수 있습니다.
+
+DI 등록부가 이 하니스의 핵심 아이디어입니다. `BotAccountPool`, `BotPlayer` 같은 등록이 전부 봇 서버의 것 그대로입니다([R3](../r3/) 페이지에서 지각·판단 파이프라인을 다룬 바로 그 봇입니다). 가상 플레이어를 새로 구현한 것이 아니라 **봇을 부하 생성기로 재사용**해서, 큐 진입부터 티켓, 룸 입장, 틱마다의 입력 전송까지 서버가 받는 부하가 콘솔 클라이언트 한 명의 부하와 같은 모양입니다. 계정 풀만 하니스 전용 패턴(`loadtest{0}`)으로 바꿔서, 닉네임 유일 제약 아래 봇 서버의 계정과 충돌하지 않게 했습니다. 풀 크기 32가 곧 동시성 상한입니다.
+
+## 매치 전체를 한 실행으로: DuelMatchWorkload
+
+```csharp
+// One execution is one whole match: queue, ticket, room, inputs, result. The player behind it is the
+// bot server's, unchanged, so what this puts the servers through is what a console client puts them
+// through. Run it at a concurrency of two or more, or the virtual players have nobody to be paired with.
+public sealed class DuelMatchWorkload(BotAccountPool pool, IBotRunner runner) : Workload
+{
+    public override async Task ExecuteAsync(WorkloadContext context)
+    {
+        var account = pool.Lease()
+            ?? throw new InvalidOperationException($"Concurrency is above the {pool.Size} accounts in the pool.");
+
+        try
+        {
+            if (!await pool.EnsureSignedInAsync(account))
+            {
+                throw new InvalidOperationException($"Could not sign {account.Email} in. Run: supabase start");
+            }
+
+            await runner.PlayAsync(account, context.CancellationToken);
+        }
+        finally
+        {
+            pool.Return(account);
+        }
+    }
+}
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/DuelMatchWorkload.cs" />
+
+`Workload`를 상속하고 `ExecuteAsync`를 구현하면 시나리오 하나가 끝입니다. 여기서는 한 번의 실행이 매치 한 판 전체(큐 진입, 티켓 수령, 룸 접속, 입력, 결과)입니다. 동시성을 2 이상으로 잡아야 가상 플레이어들끼리 짝이 맞는다는 제약도 시나리오가 "진짜 매치메이킹"을 타기 때문에 생기는, 이 하니스다운 제약입니다.
+
+## 호출만 계측: LeaderboardQueryWorkload
+
+Workload에는 실행 전후 수명주기가 있습니다. 랭킹 조회 쪽이 그 형태를 보여줍니다.
+
+```csharp
+// One execution is one ranking read. The account and the channel are set up once per virtual player, so
+// what each execution times is the call and nothing around it.
+public sealed class LeaderboardQueryWorkload(BotAccountPool pool, IOptions<BotServerOptions> options) : Workload
+{
+    private BotAccount? _account;
+    private GrpcChannel? _channel;
+    private ILeaderboardService? _leaderboards;
+
+    public override async Task SetupAsync(WorkloadContext context)
+    {
+        _account = pool.Lease()
+            ?? throw new InvalidOperationException($"Concurrency is above the {pool.Size} accounts in the pool.");
+
+        if (!await pool.EnsureSignedInAsync(_account))
+        {
+            throw new InvalidOperationException($"Could not sign {_account.Email} in. Run: supabase start");
+        }
+
+        _channel = GrpcChannel.ForAddress(options.Value.ApiServerAddress);
+        _leaderboards = MagicOnionClient.Create<ILeaderboardService>(_channel)
+            .WithHeaders(new Metadata { { "authorization", $"Bearer {_account.AccessToken}" } });
+    }
+
+    public override async Task ExecuteAsync(WorkloadContext context)
+        => await _leaderboards!.WithCancellationToken(context.CancellationToken)
+            .GetLeaderboardAsync(LeaderboardKind.Rating);
+
+    public override Task TeardownAsync(WorkloadContext context)
+    {
+        _channel?.Dispose();
+
+        if (_account is not null)
+        {
+            pool.Return(_account);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/LeaderboardQueryWorkload.cs" />
+
+가상 플레이어마다 `SetupAsync`가 한 번(로그인, 채널, 클라이언트 준비), `ExecuteAsync`가 지시받은 횟수만큼, `TeardownAsync`가 마지막에 한 번 불립니다. 준비 비용을 전부 `SetupAsync`로 밀어낸 덕에 `ExecuteAsync`에는 RPC 호출 한 줄만 남고, 측정 결과가 곧 그 호출의 지연이 됩니다. 무엇을 계측하고 싶은지가 수명주기 배치로 표현되는 구조입니다.
+
+## 실행 형태
+
+`dotnet run`으로 하니스를 띄우고 브라우저에서 `http://localhost:7312`를 열면, Workload 목록에서 시나리오를 골라 동시성과 실행 횟수를 지정해 돌리고 결과 요약을 보는 웹 UI가 나옵니다. `SHARPCAMPUS_SERVER` 환경 변수 하나로 로컬 직결 서버든 배포된 진입점이든 같은 하니스로 겨눌 수 있습니다.
+
+아래 영상이 실제 한 사이클입니다. Kubernetes에 배포된 진입점을 겨눈 하니스에서 `DuelMatchWorkload`로 매치 2판을 돌리고(대기 구간은 배속 편집), 이어서 `LeaderboardQueryWorkload`로 조회 5,000회를 돌립니다. 매치 쪽 결과 행에 찍힌 지연 93초가 곧 매치 한 판의 길이입니다.
+
+<VideoClip src="media/dframe-web-ui.mp4" poster="media/dframe-web-ui-poster.jpg" label="DFrame 웹 UI에서 두 워크로드를 실행하는 화면 녹화" />
+
+프로젝트 파일에는 실전에서 만나는 통합 디테일이 하나 남아 있습니다.
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- DFrame's controller is a Blazor Server app whose scoped CSS only reaches the output under the
+         web SDK, and on .NET 10 only behind this flag. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+  </PropertyGroup>
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/SharpCampus.LoadTest.csproj" />
+
+컨트롤러의 웹 UI가 Blazor Server 앱이라서 하니스 프로젝트는 Web SDK로 빌드해야 하고, .NET 10에서는 scoped CSS 자산이 이 플래그 뒤에 있습니다. 참고로 이 프로젝트는 `tests/` 아래에 있지만 xUnit 스위트가 아니라 직접 실행하는 하니스입니다.
+
+## 더 보기
+
+- [MagicOnion](../magiconion/): 워크로드가 두드리는 경로이자 DFrame 내부 통신의 기반
+- [R3](../r3/): 여기서 재사용하는 봇 플레이어의 지각·판단 파이프라인
+- [아키텍처 개요](../../architecture/): 부하가 흘러 들어가는 서버 구성

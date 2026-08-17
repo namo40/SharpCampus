@@ -1,0 +1,62 @@
+---
+title: "Part 3: Kubernetes on kind"
+description: Put the whole stack on a local three-node cluster and watch a rolling update drain instead of stop.
+sidebar:
+  order: 4
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+The same images behind the same Envoy entry point, this time on a local three-node [kind](https://kind.sigs.k8s.io/) cluster. This shape is fully self-contained: a PostgreSQL and a Supabase Auth (GoTrue) of its own run in the cluster beside the servers, so unlike the previous two parts nothing here needs your host's `supabase start` stack.
+
+In fact it must not be running: the cluster claims host port 54321 for its own auth endpoint, so `supabase stop` first if it is up. Docker Desktop is only needed to build the images; beyond that, kind and kubectl are all it takes.
+
+## 1. Bring up the cluster
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml build
+kind create cluster --config deploy/k8s/kind-cluster.yaml
+kind load docker-image sharpcampus-apiserver sharpcampus-roomserver sharpcampus-botserver --name sharpcampus
+kubectl apply -f deploy/k8s/manifests/
+kubectl create configmap sharpcampus-schema --from-file=schema.sql=deploy/db/schema.sql -n sharpcampus
+kubectl get pods -n sharpcampus
+```
+
+The cluster layout is <SourceLink path="deploy/k8s/kind-cluster.yaml" />, and the manifests live in `deploy/k8s/manifests/`. The game schema is still the same single file, so the `kubectl create configmap` line hands it to the cluster as-is; the database pod waits for that configmap and applies the schema on its first boot.
+
+Once every pod reports ready it looks about like this — the difference from compose being that the two match servers became a StatefulSet (`room-0` and `room-1`):
+
+```text
+NAME                            READY   STATUS    RESTARTS   AGE
+api-679486cc75-cjrhj            1/1     Running   0          2m
+api-679486cc75-pmf7r            1/1     Running   0          2m
+bot-77cc5cc7cd-mtf8m            1/1     Running   0          2m
+envoy-75d5578c4b-nzmt4          1/1     Running   0          2m
+redis-6f4cd995f5-9xhww          1/1     Running   0          2m
+room-0                          1/1     Running   0          2m
+room-1                          1/1     Running   0          2m
+supabase-auth-9457f8f84-nxlt8   2/2     Running   0          2m
+supabase-db-0                   1/1     Running   0          2m
+```
+
+## 2. Connecting works unchanged
+
+The cluster maps the entry point onto the same host port, so the client connects exactly as in part 2, with `SHARPCAMPUS_SERVER=http://localhost:5000`. Signing up and logging in work unchanged too, because auth answers on the host port the client already uses (54321).
+
+## 3. The highlight: a rolling update that spares live matches
+
+What makes this shape worth running is what a rolling update does to it:
+
+```bash
+kubectl rollout restart statefulset/room -n sharpcampus
+```
+
+The match servers are replaced one at a time, and a server being replaced **drains** rather than stops: it leaves matchmaking first, then plays out the duels it is still running before it exits. New matches keep landing on the other match server meanwhile, so a rolling update never cuts a live match short. Start a match, trigger the restart, and watch it happen. The draining behaviour is built jointly by the <SourceLink path="deploy/k8s/manifests/40-room.yaml" /> manifest and the RoomServer's shutdown handling.
+
+## 4. Tear down
+
+```bash
+kind delete cluster --name sharpcampus
+```
+
+That is the end of the getting-started guide. Why the stack is split the way it is continues in [Architecture](../../architecture/), and where each library does its work continues in [Libraries](../../libraries/).

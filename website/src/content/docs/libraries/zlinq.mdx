@@ -1,0 +1,82 @@
+---
+title: ZLinq
+description: LINQ that puts neither enumerators nor delegates on the heap. The drop-in entry call, and where it does and doesn't apply.
+sidebar:
+  order: 11
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+ZLinq is a Cysharp library that keeps LINQ's expressiveness while removing its allocations. Append `AsValueEnumerable()` to a sequence, and the `Where`, `Select`, and `MaxBy` chain that follows is assembled as a struct chain instead of heap enumerator objects. The query body reads exactly like standard LINQ. The version is 1.5.6.
+
+- GitHub: [Cysharp/ZLinq](https://github.com/Cysharp/ZLinq)
+
+## Why this library
+
+Standard LINQ allocates an enumerator object per operator, plus a closure whenever a lambda captures a local. In admin-screen code that runs once, none of that matters — but on server paths that run per request and per spawn, the small allocations pile up as GC pressure. Unrolling everything into for loops, though, buries *what is being selected* under *how the loop runs*.
+
+ZLinq's answer is the drop-in: one `AsValueEnumerable()` call, and the same chain runs on structs while still reading as LINQ. It can also chain over sources standard LINQ cannot accept at all, such as `ReadOnlySpan`.
+
+## The bot picking its landing
+
+The hottest user is the BotServer. Each time a piece spawns, the bot scores every reachable landing and picks the best — and that selection is one `MaxBy`:
+
+```csharp
+    public static GameInput[] Plan(ReadOnlySpan<CellKind> cells, PieceKind kind)
+    {
+        var candidates = Placements.Enumerate(cells, kind);
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        // Ties go to the first pose enumerated, the way the hand-rolled scan settled them.
+        return Inputs(kind, candidates.AsValueEnumerable().MaxBy(Score));
+    }
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotPlanner.cs" />
+
+`Score` is a static method group, so there is no closure either. This call walks dozens of candidates looking for the maximum, runs once per bot piece, and leaves nothing on the heap.
+
+## Server query paths
+
+The ApiServer's query services use ZLinq in the middle step that shapes arrays fetched from the DB or Redis into response DTOs. The leaderboard extracts the top 100's IDs into a set for the nickname lookup, composing naturally with a collection expression spread:
+
+```csharp
+        HashSet<UserId> ids = [.. top.AsValueEnumerable().Select(row => row.UserId)];
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/LeaderboardService.cs" />
+
+Match history filters to games that had an opponent and collects the opponent IDs:
+
+```csharp
+        HashSet<UserId> opponents =
+        [
+            .. rows.AsValueEnumerable()
+                .Where(row => row.OpponentId.HasValue)
+                .Select(row => row.OpponentId!.Value),
+        ];
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/MatchHistoryService.cs" />
+
+The room server registry turns a Redis hash's field array into a dictionary:
+
+```csharp
+        var values = fields.AsValueEnumerable().ToDictionary(field => field.Name.ToString(), field => field.Value);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Rooms/RedisRoomRegistry.cs" />
+
+Down to the mission list finding its progress row with `FirstOrDefault`, every in-memory sequence transformation on the servers follows the same pattern.
+
+## Where it is not used
+
+Not in EF Core queries. The LINQ in `db.Profiles.Where(...)` exists to build **an expression tree to be translated into SQL**, not to execute — so standard LINQ, as the `IQueryable` extensions, owns that spot. What ZLinq replaces is the traversal of sequences already in memory. With that line held, the shop repository's queries stay standard LINQ while the service layer shaping their results uses ZLinq.
+
+## See also
+
+- [ZString](../zstring/): the sibling library applying the same philosophy to string building
+- [Architecture overview](../../architecture/): where these query paths sit

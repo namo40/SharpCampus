@@ -1,0 +1,22 @@
+{
+  "name": "sharpcampus-website",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "verify:sources": "node scripts/verify-source-links.mjs",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.37.7",
+    "asciinema-player": "3.17.0",
+    "astro": "5.18.2"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "rehype-mermaid": "3.0.0"
+  }
+}

@@ -1,0 +1,113 @@
+---
+title: ZLogger
+description: 3 サーバーのログを UTF8 で直接書き出すゼロアロケーション構造化ロガー。ZLoggerMessage ソースジェネレーターと JSON コンソール出力を扱います。
+sidebar:
+  order: 13
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ZLogger は `Microsoft.Extensions.Logging` の上に建てられたゼロアロケーションロガーです。ログを UTF16 文字列として組み立ててから出力時にエンコードするのではなく、最初から UTF8 バイトとして書き込みます。このプロジェクトの 3 サーバー(ApiServer・RoomServer・BotServer)が残すログは、すべてこのライブラリを通ります。バージョンは 2.5.10 です。
+
+- GitHub: [Cysharp/ZLogger](https://github.com/Cysharp/ZLogger)
+
+## なぜ使うか
+
+ロギングは「常に動いている」コードなので、1 行のコストが呼び出し回数のぶんだけ積み上がります。標準のパイプラインでは、メッセージ組み立てが一時文字列を生み、値型パラメーターは `object` にボックス化され、コンソールに出る際に UTF8 エンコードが挟まります。ZLogger はこの経路を丸ごと置き換え、パラメーターを UTF8 バッファーへ直接書き込みます。フォーマッティングエンジンは、[ZString](../zstring/) の技法を UTF8 で受け継いだ Utf8StringInterpolation です。完成したログを実際のシンクへ送り出す仕事はバックグラウンドのライタースレッドが非同期で担うため、20 ティックごとに回るルームサーバーのホットパスがコンソール I/O を待つこともありません。
+
+それでいて独自のロギング体系ではなく、`Microsoft.Extensions.Logging` の provider です。`ILogger<T>` の注入、カテゴリー、ログレベルフィルターといった ASP.NET Core のロギング慣習が、そのまますべて通用します。
+
+## 構成: 3 サーバーが同じ 1 行
+
+3 サーバーのロギング構成は `Server.Common` の拡張メソッド 1 つに集まっていて、各サーバーの `Program.cs` は `builder.Logging.AddSharpCampusLogging()` の 1 行だけを呼びます。
+
+```csharp
+public static ILoggingBuilder AddSharpCampusLogging(this ILoggingBuilder logging)
+{
+    logging.ClearProviders();
+    logging.AddZLoggerConsole(options => options.UseJsonFormatter());
+
+    // The request start/finish log states of this category read the live HttpContext when their
+    // parameters are enumerated, and the json formatter enumerates them on ZLogger's background
+    // writer thread — concurrently with the request. That data race corrupts the request's feature
+    // cache (observed as a NullReferenceException inside routing under load), so these logs must
+    // never reach an asynchronous sink. Same failure class as
+    // https://github.com/dotnet/aspnetcore/issues/41924.
+    logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
+
+    return logging;
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Logging/LoggingBuilderExtensions.cs" />
+
+既定のコンソール provider を外し、ZLogger のコンソールを JSON フォーマッターで取り付けます。シンクが stdout ひとつだけなのは意図的です。コンテナ環境ではログの収集・ローテーションはプラットフォームの仕事なので、プロセスの責任は標準出力へ構造化された行を書くところまでです。
+
+途中のフィルターは、このファイルでいちばん学びの多い行です。ASP.NET Core のリクエスト開始/終了ログ(`Hosting.Diagnostics` カテゴリー)は、ログ状態オブジェクトがパラメーターを列挙する時点で生きている `HttpContext` を読みます。ところが ZLogger の JSON フォーマッターはその列挙をバックグラウンドのライタースレッドで行うため、リクエストを処理中のスレッドと同じ `HttpContext` に同時に触れるデータレースになります(このプロジェクトでは負荷中にルーティング内部の `NullReferenceException` として観測されました)。教訓は非同期シンク一般の原則です。ログ状態はログを残すその瞬間に値が確定しているべきで、後から列挙される際に生きているオブジェクトを読むログを非同期シンクに載せてはいけません。
+
+## ZLoggerMessage: ログメソッドをコンパイル時に
+
+呼び出し側で文字列を補間する代わりに、このプロジェクトのログはすべて `[ZLoggerMessage]` で宣言された partial メソッドです。形は .NET の `LoggerMessage` と同じですが、生成される本体が UTF8 直接書き込みです。
+
+```csharp
+public static partial class ServerLog
+{
+    [ZLoggerMessage(LogLevel.Information, "Server {serverName} {version} started")]
+    public static partial void ServerStarted(this ILogger logger, string serverName, string version);
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Logging/ServerLog.cs" />
+
+ログ宣言はサブシステムごとの静的クラスに集まっています。共通の `ServerLog` のほかに、`RoomLog`(ルームのライフサイクル・ドレイン・精算失敗)、`MatchmakingLog`(ペアリング・ボット召喚)、`BotLog`(ボットのライフサイクル)、`MasterDataLog`(起動時のマスターデータ要約)の 5 か所です。ルーム側の宣言を少し見るとこうなっています。
+
+```csharp
+[ZLoggerMessage(LogLevel.Information, "Room {roomId} created with seed {seed}")]
+public static partial void RoomCreated(this ILogger logger, RoomId roomId, ulong seed);
+
+// ...
+
+[ZLoggerMessage(LogLevel.Information, "Room {roomId} finished at tick {tick}: {outcome} by {reason}")]
+public static partial void RoomFinished(
+    this ILogger logger,
+    RoomId roomId,
+    int tick,
+    DuelOutcome outcome,
+    MatchEndReason reason);
+
+// ...
+
+[ZLoggerMessage(LogLevel.Error, "Room {roomId} stopped ticking")]
+public static partial void RoomTickFaulted(this ILogger logger, Exception exception, RoomId roomId);
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/RoomLog.cs" />
+
+呼び出し側は `logger.RoomCreated(roomId, seed)` の 1 行になります。この方式の利得は性能だけではありません。メッセージテンプレートとパラメーター名がコンパイル時に固定されるので打ち間違いはビルドエラーになり、サーバーが残しうるログ文言の全一覧が 5 つのファイルに収まります。例外は `RoomTickFaulted` のように `Exception` パラメーターを宣言すれば、フレームワークの規約どおり一緒に記録されます。
+
+## JSON 出力: パラメーターがそのままプロパティに
+
+JSON フォーマッターを取り付けたので、上の宣言 1 つが実際に残す行はこうです(読みやすさのため改行だけ足しています)。
+
+```json
+{
+  "Timestamp": "2026-08-17T18:23:53.9847292+09:00",
+  "LogLevel": "Information",
+  "Category": "SharpCampus.RoomServer.Rooms.RoomManager",
+  "Message": "Room 01K2N0Y6R1V9NXKQ4XH7SJ9F3A created with seed 1234567890",
+  "roomId": "01K2N0Y6R1V9NXKQ4XH7SJ9F3A",
+  "seed": 1234567890
+}
+```
+
+レンダリング済みの文(`Message`)とは別に、テンプレートの各パラメーターがその名前のままトップレベルのプロパティになります。ログ収集基盤で `roomId` にフィルターをかければ 1 つのルームの一生がそのまま並ぶ、構造化ロギングです。注目したい点がひとつ: `roomId` が構造体の包みなしの 26 文字テキストになっています。[UnitGenerator](../unitgenerator/) が値オブジェクトに生成しておいた JsonConverter がログ直列化でも働いていて、[Ulid](../ulid/) の文字列がワイヤ・DB に続いてログでも同じ表記で現れます。
+
+## どこに使わないか
+
+コンソールクライアントに ZLogger はありません。クライアントのコンソールはログではなくゲーム画面が占める場所で、あちらの出力は Spectre.Console と [ZString](../zstring/) の担当です。ロギングは「人ではなく収集基盤が読む出力」があるサーバー側の話です。
+
+## あわせて読む
+
+- [ZString](../zstring/): 同じフォーマッティング技法のクライアント側の顔
+- [UnitGenerator](../unitgenerator/): ログのプロパティにまで届く値オブジェクトの境界統合
+- [LogicLooper](../logiclooper/): これらのログが記録するルームのティックループ

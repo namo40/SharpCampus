@@ -1,0 +1,84 @@
+---
+title: R3
+description: The ground-up redesign of Rx. It wires the bot's perception (tick deltas) to its decisions (input plans) as one declarative pipeline.
+sidebar:
+  order: 6
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+R3 is Rx (Reactive Extensions) redesigned from scratch for modern .NET, by the developer behind UniRx and dotnet/reactive (neuecc) building on that experience: `Observable<T>` is an abstract class rather than an interface, and scheduling sits on the standard .NET `TimeProvider`. In SharpCampus it belongs to the BotServer — the whole play of a [bot summoned](../../architecture/matchmaking/) when the queue has no opponent is a single R3 pipeline. The version is 1.3.1.
+
+- GitHub: [Cysharp/R3](https://github.com/Cysharp/R3)
+
+## Why this library
+
+A bot's play is reactive by nature. When a new piece spawns on its board, it reads the board and plans a placement, turns the plan into a burst of inputs, and sends them one by one at human-hand speed. The burst always ends in a hard drop, the hard drop causes the next spawn, and the cycle repeats until the match ends.
+
+Written with callbacks and manual timers, that scatters into a state machine of "await spawn → plan → send timer → cancellation handling." Written with R3, it becomes **one chain of stream transformations**, and disposing a single subscription cleans up everything including timers mid-flight.
+
+## Perception: the delta stream
+
+The bot's receiver applies each tick delta the room pushes to a local replica, then forwards the same delta through a `Subject<TickDelta>`:
+
+```csharp
+private readonly Subject<TickDelta> _deltas = new();
+
+// ...
+
+public Observable<TickDelta> Deltas => _deltas;
+
+// ...
+
+public void OnTickDelta(TickDelta delta)
+{
+    lock (_gate)
+    {
+        Replica.ApplyTickDelta(delta);
+    }
+
+    _deltas.OnNext(delta);
+}
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotReceiver.cs" />
+
+Updating the replica before pushing is the contract: a subscriber that reads the board after receiving a delta sees the very tick it was just told about.
+
+## Decision: the pipeline, in full
+
+The bot's entire play is this one expression:
+
+```csharp
+using var play = Resumed(receiver, seat)
+    .Concat(Spawns(receiver, seat))
+    .Select(_ => receiver.Read(
+        seat,
+        static (index, replica) => BotPlanner.Plan(replica.Boards[index.AsPrimitive()])))
+    .Where(static plan => plan.Length > 0)
+    .SelectMany(plan => Paced(plan, cadence))
+    .SubscribeAwait(hub, static (input, room, _) => new ValueTask(room.SendInputsAsync([input])));
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotPlayer.cs" />
+
+Reading top to bottom:
+
+1. **`Resumed`**: if a piece is already falling when the bot is seated (a resume that missed the spawn), fire once via `Observable.Return`; otherwise `Observable.Empty`. `Concat` prepends it to the spawn stream.
+2. **`Spawns`**: the delta stream filtered down to `PieceSpawned` events for the bot's own seat.
+3. **`Select`**: on each spawn, read the board and let `BotPlanner` produce a placement plan — an array of inputs.
+4. **`SelectMany(Paced(...))`**: instead of dumping the plan at once, `Observable.Zip(plan.ToObservable(), Observable.Interval(cadence, time))` releases one input per beat.
+5. **`SubscribeAwait`**: an async subscription that awaits the hub call (`SendInputsAsync`) per input.
+
+Because every burst ends in a hard drop and the hard drop causes the next spawn, two plans can never be in flight together — structurally.
+
+## Two details that are very R3
+
+**Closure-free operators.** The lambdas in the pipeline are `static`: R3's operators offer state-passing overloads like `Where(state, static (x, s) => ...)`, which eliminates closure allocations on the per-delta path.
+
+**Time belongs to `TimeProvider`.** The `time` in `Observable.Interval(cadence, time)` is a DI-injected `TimeProvider`. The cadence is owned by the stream, so disposing the subscription stops the timer with it — and tests can drive time with a fake `TimeProvider`.
+
+## See also
+
+- [Matchmaking](../../architecture/matchmaking/): the path that summons this bot (the bot fallback)
+- [MagicOnion](../magiconion/): the StreamingHub the inputs ride at the end of the pipeline

@@ -1,0 +1,53 @@
+.mermaid-diagram img {
+  max-width: 100%;
+  height: auto;
+  cursor: zoom-in;
+}
+
+.sc-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.6);
+  cursor: zoom-out;
+}
+
+/* The SVGs are transparent, so the page background color keeps each theme's
+   diagram text readable over the dimmed backdrop. */
+.sc-lightbox img {
+  width: 95vw;
+  height: 90vh;
+  object-fit: contain;
+  background: var(--sl-color-bg);
+  border-radius: 0.5rem;
+}
+
+.sc-lightbox-open {
+  overflow: hidden;
+}
+
+.mermaid-diagram-dark {
+  display: none;
+}
+
+[data-theme='dark'] .mermaid-diagram-light {
+  display: none;
+}
+
+[data-theme='dark'] .mermaid-diagram-dark {
+  display: inline-block;
+}
+
+.sc-asciinema-player {
+  margin-block: 1rem;
+}
+
+/* Korean must wrap between words, never inside them; Japanese keeps the default
+   anywhere-breaking, which is correct typesetting for spaceless text. */
+:root[lang='ko'] {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}

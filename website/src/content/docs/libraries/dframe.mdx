@@ -1,0 +1,189 @@
+---
+title: DFrame
+description: The distributed load-testing framework where a scenario is a C# class. Bots ride as virtual players, one whole match per execution.
+sidebar:
+  order: 15
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+import VideoClip from '../../../components/VideoClip.astro';
+
+DFrame is a distributed load-testing framework where a scenario is a C# class (a `Workload`). A controller opens a web UI, workers connect to it and run workloads at whatever concurrency they are told, and adding worker processes scales the load horizontally. In this project, `tests/SharpCampus.LoadTest` hammers the matchmaking-and-duel path and the leaderboard read with two workloads. The version is 2.0.0.
+
+- GitHub: [Cysharp/DFrame](https://github.com/Cysharp/DFrame)
+
+## Why this library
+
+General-purpose load tools are mostly shaped around describing HTTP requests, so reproducing this project's traffic — gRPC over MagicOnion, MessagePack payloads, live StreamingHub sessions — would mean reimplementing the protocol inside the tool. With DFrame the scenario is plain C# code, so it uses the very libraries a real client uses (`MagicOnion.Client`, the contract assembly) as they are. There is no protocol to reproduce, and the load has the same shape as real client load.
+
+One entertaining fact: DFrame is itself built out of the libraries this site has been covering. Its package dependencies line up [MagicOnion](../magiconion/) (the controller-to-worker channel), [MessagePack](../messagepack/), [MessagePipe](../messagepipe/) and [ConsoleAppFramework](../consoleappframework/). It doubles as a specimen of what a production tool built on this stack looks like.
+
+## The harness: the bot is the virtual player
+
+The harness's `Program.cs`, in full:
+
+```csharp
+using DFrame;
+using MagicOnion.Serialization;
+using SharpCampus.BotServer.Bots;
+using SharpCampus.BotServer.Configuration;
+using SharpCampus.Shared.Serialization;
+
+// Every workload here is a client of the two servers, and every client it creates has to read the same
+// MessagePack shapes those servers write. DFrame's own controller-to-worker channel carries a serializer
+// of its own, so this does not disturb it.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// Web UI on the first port, workers connect on the second.
+var builder = DFrameApp.CreateBuilder(7312, 7313);
+
+builder.ConfigureServices(services =>
+{
+    services.Configure<BotServerOptions>(options =>
+    {
+        // The same switch the console client honours, so the one env var aims this harness at a direct
+        // server or at the deployed entry point alike.
+        if (Environment.GetEnvironmentVariable("SHARPCAMPUS_SERVER") is { Length: > 0 } server)
+        {
+            options.ApiServerAddress = server;
+        }
+
+        // A pool of this harness's own. Nicknames are unique across accounts, so virtual players cannot
+        // wear the names the bot server's accounts already hold.
+        options.EmailPattern = "loadtest{0}@sharpcampus.dev";
+        options.NicknamePattern = "load{0}";
+        options.Password = "sharpcampus-loadtest";
+
+        // The ceiling on concurrency: a virtual player holds one account for as long as it plays.
+        options.AccountPoolSize = 32;
+    });
+
+    services.AddSingleton(TimeProvider.System);
+    services.AddSingleton<IBotAuthClient, SupabaseBotAuthClient>();
+    services.AddSingleton<IBotProfileClient, ApiBotProfileClient>();
+    services.AddSingleton<BotAccountPool>();
+    services.AddSingleton<IBotRunner, BotPlayer>();
+});
+
+await builder.RunAsync();
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/Program.cs" />
+
+`DFrameApp.CreateBuilder(7312, 7313)` is the form that hosts controller and worker together in one process — web UI on the first port, worker connections on the second — so when more load is wanted, extra workers can attach as separate processes.
+
+The DI block is the harness's central idea. Registrations like `BotAccountPool` and `BotPlayer` are the bot server's own, unchanged (the very bot whose perceive-and-decide pipeline the [R3](../r3/) page covers). Rather than implementing a virtual player, the harness **reuses the bot as its load generator**, so from queue entry through ticket, room join and per-tick inputs, the load a server receives has exactly the shape of one console client's load. Only the account pool is swapped for a harness-owned pattern (`loadtest{0}`), keeping clear of the bot server's accounts under the nickname-uniqueness constraint. The pool size of 32 is also the concurrency ceiling.
+
+## A whole match per execution: DuelMatchWorkload
+
+```csharp
+// One execution is one whole match: queue, ticket, room, inputs, result. The player behind it is the
+// bot server's, unchanged, so what this puts the servers through is what a console client puts them
+// through. Run it at a concurrency of two or more, or the virtual players have nobody to be paired with.
+public sealed class DuelMatchWorkload(BotAccountPool pool, IBotRunner runner) : Workload
+{
+    public override async Task ExecuteAsync(WorkloadContext context)
+    {
+        var account = pool.Lease()
+            ?? throw new InvalidOperationException($"Concurrency is above the {pool.Size} accounts in the pool.");
+
+        try
+        {
+            if (!await pool.EnsureSignedInAsync(account))
+            {
+                throw new InvalidOperationException($"Could not sign {account.Email} in. Run: supabase start");
+            }
+
+            await runner.PlayAsync(account, context.CancellationToken);
+        }
+        finally
+        {
+            pool.Return(account);
+        }
+    }
+}
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/DuelMatchWorkload.cs" />
+
+Inherit `Workload`, implement `ExecuteAsync`, and a scenario is done. Here one execution is one whole match — queue entry, ticket, room join, inputs, result. Even the constraint that concurrency must be two or more, so the virtual players have someone to be paired with, comes from the scenario riding real matchmaking; a constraint true to this harness.
+
+## Timing only the call: LeaderboardQueryWorkload
+
+A workload also has a lifecycle around its executions, and the ranking-read side shows the shape:
+
+```csharp
+// One execution is one ranking read. The account and the channel are set up once per virtual player, so
+// what each execution times is the call and nothing around it.
+public sealed class LeaderboardQueryWorkload(BotAccountPool pool, IOptions<BotServerOptions> options) : Workload
+{
+    private BotAccount? _account;
+    private GrpcChannel? _channel;
+    private ILeaderboardService? _leaderboards;
+
+    public override async Task SetupAsync(WorkloadContext context)
+    {
+        _account = pool.Lease()
+            ?? throw new InvalidOperationException($"Concurrency is above the {pool.Size} accounts in the pool.");
+
+        if (!await pool.EnsureSignedInAsync(_account))
+        {
+            throw new InvalidOperationException($"Could not sign {_account.Email} in. Run: supabase start");
+        }
+
+        _channel = GrpcChannel.ForAddress(options.Value.ApiServerAddress);
+        _leaderboards = MagicOnionClient.Create<ILeaderboardService>(_channel)
+            .WithHeaders(new Metadata { { "authorization", $"Bearer {_account.AccessToken}" } });
+    }
+
+    public override async Task ExecuteAsync(WorkloadContext context)
+        => await _leaderboards!.WithCancellationToken(context.CancellationToken)
+            .GetLeaderboardAsync(LeaderboardKind.Rating);
+
+    public override Task TeardownAsync(WorkloadContext context)
+    {
+        _channel?.Dispose();
+
+        if (_account is not null)
+        {
+            pool.Return(_account);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/LeaderboardQueryWorkload.cs" />
+
+Per virtual player, `SetupAsync` runs once (sign-in, channel, client), `ExecuteAsync` runs as many times as instructed, and `TeardownAsync` closes out. With all preparation pushed into `SetupAsync`, the only thing left in `ExecuteAsync` is the one RPC call — so the measurement is that call's latency and nothing else. What you want to measure is expressed by where things sit in the lifecycle.
+
+## Running it
+
+Start the harness with `dotnet run`, open `http://localhost:7312`, and the web UI lets you pick a scenario from the workload list, set concurrency and execution counts, run it and read the result summary. The single `SHARPCAMPUS_SERVER` environment variable aims the same harness at a directly-connected local server or at a deployed entry point alike.
+
+The clip below is one real cycle. With the harness aimed at the Kubernetes-deployed entry point, `DuelMatchWorkload` runs two paired matches (the wait is sped up in editing), followed by `LeaderboardQueryWorkload` running 5,000 reads. The 93-second latency stamped on the match row is precisely the length of one match.
+
+<VideoClip src="media/dframe-web-ui.mp4" poster="media/dframe-web-ui-poster.jpg" label="A screen recording of both workloads running in the DFrame web UI" />
+
+The project file holds one integration detail of the kind you meet in practice:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- DFrame's controller is a Blazor Server app whose scoped CSS only reaches the output under the
+         web SDK, and on .NET 10 only behind this flag. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+  </PropertyGroup>
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/SharpCampus.LoadTest.csproj" />
+
+The controller's web UI is a Blazor Server app, so the harness project builds under the Web SDK, and on .NET 10 the scoped CSS assets sit behind this flag. Note that although the project lives under `tests/`, it is a directly-run harness, not an xUnit suite.
+
+## See also
+
+- [MagicOnion](../magiconion/): the paths the workloads hammer, and the foundation of DFrame's own channel
+- [R3](../r3/): the perceive-and-decide pipeline of the bot player reused here
+- [Architecture overview](../../architecture/): the server topology the load flows into

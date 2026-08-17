@@ -1,0 +1,51 @@
+---
+title: SharpCampus
+description: Learn game server development with MagicOnion and the Cysharp ecosystem.
+template: splash
+hero:
+  tagline: "Learn game server development with MagicOnion and the Cysharp ecosystem — through a complete 1v1 tetromino battle server."
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+    - text: Architecture
+      link: /architecture/
+      icon: right-arrow
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import AsciinemaPlayer from '../../components/AsciinemaPlayer.astro';
+
+## Demo
+
+<AsciinemaPlayer src="casts/duel.cast" poster="npt:0:33" />
+
+An unedited recording of real play. Two guests sign in and meet in the matchmaking queue; from there the server simulates everything — gravity, rotation, line clears and garbage — at 20 ticks a second. All the clients ever send is key presses.
+
+## What is SharpCampus?
+
+SharpCampus is a project for learning game server development. It ships a complete 1v1 falling-block battle server built with MagicOnion and the Cysharp ecosystem, and this site explains each library against that finished code.
+
+Instead of toy snippets you read one coherent codebase: two gRPC servers splitting the meta-game and the real-time match, a bot server that steps in when nobody else is queueing, a console client that runs in the terminal, and Docker Compose and Kubernetes deployments — all in a single repository.
+
+## The shape of the server
+
+- **ApiServer** — the meta-game server: accounts, profiles, the shop, missions and matchmaking
+- **RoomServer** — the real-time server simulating matches on a server-authoritative tick loop
+- **BotServer** — the bot host that joins through the same path a normal client takes when the queue is empty
+- **Console client** — the game itself: takes the whole terminal, driven by keyboard alone
+- In front of them an Envoy single entry point; behind them Redis and PostgreSQL (Supabase Auth)
+
+## What it is built with
+
+RPC and real-time streaming are [MagicOnion](https://github.com/Cysharp/MagicOnion)'s job. Underneath it, fourteen libraries each hold down their own corner: the tick loop (LogicLooper), domain events (MessagePipe), reactive streams (R3), master data (MasterMemory), logging (ZLogger) and more. Which library is used where, and why, gets a page of its own in the Libraries section.
+
+## Explore
+
+<CardGrid>
+  <LinkCard title="Getting Started" href="getting-started/" description="Run it yourself in three parts: from source, on Docker Compose, then on Kubernetes." />
+  <LinkCard title="Architecture" href="architecture/" description="How the two servers divide the work, the matchmaking pipeline, and the life of a room — in diagrams." />
+  <LinkCard title="Libraries" href="libraries/" description="Fourteen libraries explained through where this codebase actually uses them." />
+  <LinkCard title="Topics" href="topics/" description="Cross-cutting themes like server-authoritative simulation, reconnection and settlement." />
+</CardGrid>

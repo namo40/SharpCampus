@@ -1,0 +1,37 @@
+---
+interface Props {
+  /** Video path relative to `public/`, e.g. `media/dframe-web-ui.mp4`. */
+  src: string;
+  /** Accessible description of the clip. */
+  label: string;
+  /** Preview image path relative to `public/`, shown before playback. */
+  poster?: string;
+}
+
+const { src, label, poster } = Astro.props;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const assetUrl = (path: string) => `${base}/${path.replace(/^\//, '')}`;
+---
+
+<video
+  class="sc-video-clip"
+  controls
+  muted
+  playsinline
+  preload="metadata"
+  aria-label={label}
+  src={assetUrl(src)}
+  poster={poster === undefined ? undefined : assetUrl(poster)}
+></video>
+
+<style>
+  .sc-video-clip {
+    display: block;
+    width: 100%;
+    margin-top: 1rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background: var(--sl-color-black);
+  }
+</style>

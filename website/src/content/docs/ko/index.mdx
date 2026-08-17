@@ -1,0 +1,51 @@
+---
+title: SharpCampus
+description: MagicOnion과 Cysharp 생태계로 배우는 게임 서버 개발.
+template: splash
+hero:
+  tagline: "MagicOnion과 Cysharp 생태계로 배우는 게임 서버 개발. 완성된 1:1 테트로미노 대전 서버가 교재입니다."
+  actions:
+    - text: 시작하기
+      link: /ko/getting-started/
+      icon: right-arrow
+    - text: 아키텍처
+      link: /ko/architecture/
+      icon: right-arrow
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import AsciinemaPlayer from '../../../components/AsciinemaPlayer.astro';
+
+## 데모
+
+<AsciinemaPlayer src="casts/duel.cast" poster="npt:0:33" />
+
+편집 없는 실제 플레이 녹화입니다. 게스트 2명이 로그인해 매치메이킹 큐에서 만나고, 이후의 중력·회전·라인 클리어·가비지 판정은 전부 서버가 초당 20틱으로 시뮬레이션합니다. 클라이언트가 보내는 것은 키 입력뿐입니다.
+
+## SharpCampus란?
+
+SharpCampus는 게임 서버 개발 학습 프로젝트입니다. MagicOnion과 Cysharp 생태계로 만든 1:1 낙하 블록 대전 서버를 완성된 형태로 제공하고, 이 사이트가 그 코드를 기준으로 각 라이브러리를 해설합니다.
+
+장난감 예제 대신 하나의 완결된 코드베이스를 읽습니다. 메타게임과 실시간 매치를 나눠 맡는 gRPC 서버 2개, 상대가 없을 때 투입되는 봇 서버, 터미널에서 실행되는 콘솔 클라이언트, 그리고 Docker Compose와 Kubernetes 배포까지 전부 한 저장소에 들어 있습니다.
+
+## 서버 구성
+
+- **ApiServer**: 계정·프로필·상점·미션·매치메이킹을 맡는 메타게임 서버
+- **RoomServer**: 서버 권위 틱 루프로 매치를 시뮬레이션하는 실시간 서버
+- **BotServer**: 큐에 상대가 없으면 일반 클라이언트와 같은 경로로 참전하는 봇 호스트
+- **콘솔 클라이언트**: 게임 그 자체. 터미널 전체를 쓰고 키보드로만 조작
+- 그 앞에는 Envoy 단일 진입점, 뒤에는 Redis와 PostgreSQL(Supabase Auth)
+
+## 무엇으로 만들었나
+
+RPC와 실시간 스트리밍은 [MagicOnion](https://github.com/Cysharp/MagicOnion)이 맡습니다. 그 아래에서 틱 루프(LogicLooper), 도메인 이벤트(MessagePipe), 리액티브 스트림(R3), 마스터데이터(MasterMemory), 로깅(ZLogger)을 비롯한 라이브러리 14종이 각자의 영역을 담당합니다. 어떤 라이브러리가 어디에 왜 쓰였는지는 라이브러리 섹션에서 한 편씩 다룹니다.
+
+## 둘러보기
+
+<CardGrid>
+  <LinkCard title="시작 가이드" href="getting-started/" description="소스 실행, Docker Compose, Kubernetes의 3부 구성으로 직접 띄워 봅니다." />
+  <LinkCard title="아키텍처" href="architecture/" description="ApiServer와 RoomServer의 분업, 매치메이킹 파이프라인, 방의 수명주기를 다이어그램으로 봅니다." />
+  <LinkCard title="라이브러리" href="libraries/" description="라이브러리 14종을 이 코드베이스의 실제 사용처 기준으로 해설합니다." />
+  <LinkCard title="주제 해설" href="topics/" description="서버 권위 시뮬레이션, 재접속, 정산처럼 라이브러리를 가로지르는 주제를 다룹니다." />
+</CardGrid>

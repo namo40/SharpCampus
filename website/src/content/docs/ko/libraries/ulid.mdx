@@ -1,0 +1,85 @@
+---
+title: Ulid
+description: 생성 시간순으로 정렬되는 128비트 식별자와 그 고속 C# 구현. RoomId·MatchId가 경계마다 어떻게 처리되는지 다룹니다.
+sidebar:
+  order: 9
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ULID(Universally Unique Lexicographically Sortable Identifier)는 앞 48비트가 밀리초 타임스탬프, 뒤 80비트가 난수인 128비트 식별자 규격입니다. Cysharp의 Ulid 라이브러리는 그 C# 구현으로, `Guid`처럼 struct라 할당이 없고 생성·파싱·비교가 빠르게 최적화되어 있습니다. 이 프로젝트에서는 `RoomId`와 `MatchId`가 Ulid를 감쌉니다. 버전은 1.4.1입니다.
+
+- GitHub: [Cysharp/Ulid](https://github.com/Cysharp/Ulid)
+- 규격: [ulid/spec](https://github.com/ulid/spec)
+
+## 왜 쓰나
+
+무작위 `Guid`는 언제 만들어졌는지에 대한 정보가 없고, 정렬해도 의미 있는 순서가 나오지 않습니다. ULID는 타임스탬프가 상위 비트에 있어서 값 정렬이 곧 생성 시간순이고, 문자열 표기도 26자 Crockford Base32라 사전순 정렬이 그대로 시간순입니다. 룸과 매치처럼 "언제 만들어졌나"가 자연스러운 관심사인 식별자에서는, 로그를 ID로 정렬만 해도 사건 순서가 나오고 DB 인덱스도 삽입 순서대로 자랍니다.
+
+## 발급되는 두 자리
+
+`RoomId`는 매치메이킹 워커가 두 명을 짝지을 때 발급합니다.
+
+```csharp
+        var roomId = new RoomId(Ulid.NewUlid());
+        var players = new[] { await SeatAsync(first), await SeatAsync(second) };
+
+        var result = await roomControl.CreateRoomAsync(server.ControlEndpoint, new CreateRoomRequest(roomId, players));
+```
+
+<SourceLink path="src/SharpCampus.ApiServer/Matchmaking/MatchmakingWorker.cs" />
+
+`MatchId`는 룸이 게임마다 발급합니다. 리매치는 같은 룸에서 새 게임을 시작하므로 새 `MatchId`를 받습니다.
+
+```csharp
+    // Identifies the game rather than the room: a rematch is settled on its own.
+    public MatchId MatchId { get; private set; } = MatchId.New();
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+`MatchId.New()`는 손으로 쓴 메서드가 아닙니다. [UnitGenerator](../unitgenerator/)는 감싼 프리미티브가 `Guid`나 `Ulid`면 새 값을 발급하는 정적 `New()`를 함께 생성합니다.
+
+## 경계마다 하나씩의 처리
+
+Ulid는 서드파티 타입이라, 값이 지나는 경계마다 "이 타입을 어떻게 읽고 쓰는가"를 한 번씩 정해 줘야 합니다. 이 프로젝트에 나오는 네 경계입니다.
+
+**MessagePack 와이어.** 표준 리졸버는 Ulid를 모르기 때문에, `Ulid.MessagePack` 패키지의 포매터를 공용 직렬화 옵션에 등록합니다. `RoomId`의 생성 포매터가 내부 값을 직렬화할 때 리졸버에서 이 포매터를 찾아 씁니다. 등록 코드는 [MessagePack-CSharp 페이지](../messagepack/)에 있습니다.
+
+**데이터베이스.** `MatchId`는 경기 기록의 키 칼럼인데, Npgsql은 Ulid를 매핑하지 못합니다. 그래서 이 타입만 컨버터를 생성에 맡기지 않고 손으로 씁니다. 저장 형태는 표준 26자 텍스트입니다.
+
+```csharp
+[UnitOf(typeof(Ulid), UnitOptions.Transported | UnitGenerateOptions.ParseMethod)]
+public readonly partial struct MatchId
+{
+#if NET10_0_OR_GREATER
+    /// <summary>
+    /// Stores the id as its canonical 26 character text. Written by hand rather than generated because
+    /// UnitGenerator's converter would hand the provider a <see cref="Ulid"/>, which Npgsql cannot map.
+    /// </summary>
+    public sealed class MatchIdValueConverter()
+        : ValueConverter<MatchId, string>(id => id.AsPrimitive().ToString(), text => Parse(text));
+#endif
+}
+```
+
+<SourceLink path="src/SharpCampus.Shared/Values/MatchId.cs" />
+
+**JSON.** Ulid의 `JsonConverter`는 .NET 빌드에만 들어 있습니다. 그래서 `RoomId`·`MatchId`가 쓰는 Transported 프리셋은 netstandard2.1 빌드에서 JSON 컨버터 생성을 빼고, 서버가 쓰는 net10.0 빌드에서만 넣습니다. 프리셋의 `#if` 분기는 [UnitGenerator 페이지](../unitgenerator/)에서 봤던 그 구조입니다.
+
+**Redis.** 매치메이킹 티켓은 Redis에 JSON 텍스트로 앉아 있어서, `RoomId`는 문자열로 저장하고 읽을 때 `Parse`로 되돌립니다. ParseMethod 옵션이 만들어 준 `Parse`·`TryParse`가 이 왕복을 담당합니다.
+
+```csharp
+        var stored = JsonSerializer.Deserialize<StoredTicket>(value.ToString(), JsonSerializerOptions.Web)!;
+        return new MatchTicket(RoomId.Parse(stored.RoomId), stored.Endpoint, stored.EntryToken);
+```
+
+<SourceLink path="src/SharpCampus.ApiServer/Matchmaking/RedisTicketStore.cs" />
+
+같은 26자 텍스트가 gRPC 헤더의 룸 라우팅 키로도, redis-cli에서 눈으로 읽는 값으로도 그대로 쓰입니다. 사람이 읽고 옮겨 적을 수 있는 표기가 규격에 포함되어 있다는 점이 운영에서는 은근히 큰 편의입니다.
+
+## 더 보기
+
+- [UnitGenerator](../unitgenerator/): `RoomId`·`MatchId`를 값 객체로 만드는 쪽의 이야기
+- [MessagePack-CSharp](../messagepack/): Ulid 포매터가 등록되는 공용 직렬화 옵션
+- [아키텍처 개요](../../architecture/): 룸 ID가 매치메이킹과 라우팅에서 도는 경로

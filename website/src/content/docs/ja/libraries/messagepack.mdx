@@ -1,0 +1,86 @@
+---
+title: MessagePack-CSharp
+description: すべての MagicOnion 呼び出しのペイロードを担うバイナリ直列化器。契約の属性、v3 ソースジェネレーター、リゾルバー構成まで扱います。
+sidebar:
+  order: 3
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MessagePack は「JSON のように使えて、より小さく速い」バイナリ直列化フォーマットで、MessagePack-CSharp はその C# 実装です。[MagicOnion](../magiconion/) が既定の直列化器として採用しているため、このプロジェクトの RPC ペイロードは、毎ティック配信されるボードの差分に至るまで、すべてこのフォーマットで流れます。バージョンは 3.1.8 です。
+
+- GitHub: [MessagePack-CSharp/MessagePack-CSharp](https://github.com/MessagePack-CSharp/MessagePack-CSharp)
+- フォーマット仕様: [msgpack.org](https://msgpack.org/)
+
+## なぜ使うのか
+
+JSON はフィールド名を毎回文字列として運び、数値もテキストとして運びます。MessagePack は値を型タグ付きのバイナリとして運び、C# 実装の既定方式ではフィールド名をそもそも運びません(下の `Key` を参照)。毎秒 20 ティックで 2 つのボードの変化を押し出すゲームサーバーでは、このペイロード量とエンコード速度の差がそのまま帯域と CPU になります。
+
+エコシステムの事情もあります。MessagePack-CSharp は MagicOnion と同じ開発者の系列(Cysharp/neuecc)にあるライブラリなので統合が滑らかで、Unity を含む AOT 環境への対応がソースジェネレーターで用意されています。MagicOnion を選んだ時点で、直列化器は事実上一緒に付いてくる選択です。
+
+## 契約の属性: Key 番号がプロトコル
+
+直列化対象の型に `[MessagePackObject]` を付け、各メンバーに `[Key(n)]` で番号を振ります。毎ティック送られる差分の契約はこうなっています。
+
+```csharp
+[MessagePackObject]
+public sealed record TickDelta(
+    [property: Key(0)] TickNumber Tick,
+    [property: Key(1)] PlayerDelta[] Players,
+    [property: Key(2)] DuelEvent[] Events);
+```
+
+<SourceLink path="src/SharpCampus.Shared/Duel/TickDelta.cs" />
+
+positional record なので、`[property: Key(0)]` の形でコンストラクタ引数に付ければ、生成されるプロパティに属性が引き継がれます。ワイヤ上でこの型はフィールド名のない 3 マスの配列です。概念的にはこうです。
+
+```text
+[tick, [player0, player1], [event, event, ...]]
+```
+
+名前がないので、`Key` 番号がそのままプロトコルです。番号を変えたり再利用したりすると、サーバーとクライアントが同じバイト列を違う意味に読むことになるため、契約の変更は末尾への追加が安全です。逆に、メンバー名の変更はワイヤに何の影響もありません。
+
+## v3 ソースジェネレーター: コード無変更の AOT
+
+以前の MessagePack-CSharp は、実行時に IL を生成してフォーマッターを作っていました。高速ですが、IL 生成が禁じられた AOT 環境(Unity IL2CPP など)では別のコード生成ツールを回す必要がありました。v3 からは**ソースジェネレーターが既定**です。`[MessagePackObject]` の型をコンパイルするとその場でフォーマッターが生成され、アセンブリごとに生成物を束ねる `GeneratedMessagePackResolver` も一緒に作られます。
+
+配線コードはありません。生成されたリゾルバーはアセンブリ属性で印が付き、既定のリゾルバーチェーンがそれを自動的に発見して優先します。だからこのプロジェクトのどこにも `GeneratedMessagePackResolver` を登録するコードは見当たりませんが、契約型の直列化はすべてコンパイル時生成のコードで回っています。
+
+## リゾルバー構成: 1 か所で
+
+直列化オプションは、契約を話すすべてのプロセスがまったく同じに揃えるべき値なので、`SharpCampus.Shared` の静的クラス 1 か所に集めました。
+
+```csharp
+public static MessagePackSerializerOptions Options { get; } = MessagePackSerializerOptions.Standard
+    .WithResolver(CompositeResolver.Create(
+        [new UlidMessagePackFormatter()],
+        [StandardResolver.Instance]));
+
+public static IMagicOnionSerializerProvider Provider { get; } =
+    MessagePackMagicOnionSerializerProvider.Default.WithOptions(Options);
+```
+
+<SourceLink path="src/SharpCampus.Shared/Serialization/ContractSerialization.cs" />
+
+`CompositeResolver.Create` は「まずこのフォーマッター群、なければこのリゾルバー群」の順で照会するリゾルバーを作ります。ここで足しているのは `Ulid.MessagePack` パッケージの Ulid フォーマッター 1 つだけです。`RoomId` は Ulid を包む値オブジェクトで、その生成フォーマッターが内側の値を直列化しようとリゾルバーに Ulid のフォーマッターを要求しますが、標準リゾルバーはサードパーティ型の Ulid を知らないためです。
+
+`Provider` はこのオプションを MagicOnion に取り付けるアダプターです。設置場所は 3 形態あります。
+
+| 場所 | 方法 |
+| --- | --- |
+| サーバー (ApiServer・RoomServer) | `AddMagicOnion(options => options.MessageSerializer = ContractSerialization.Provider)` |
+| クライアント (コンソールクライアント・CLI・BotServer) | 起動時に `MagicOnionSerializerProvider.Default = ContractSerialization.Provider` を全域設定 |
+| サーバー間クライアント | `MagicOnionClient.Create<T>(channel, ContractSerialization.Provider)` と明示的に渡す |
+
+どれか 1 つのプロセスだけオプションが違えば、同じバイト列を両端が違う意味に読みます。「1 か所で定義し、全員がそこから取る」がこのクラスの存在理由です。
+
+## 値オブジェクトとマスターデータ
+
+このプロジェクトの ID・数値型(`UserId`、`RoomId`、`TickNumber`、`Coins` など)は UnitGenerator で作った値オブジェクトで、生成オプションに `MessagePackFormatter` が入っているため専用フォーマッターも一緒に生成されます。おかげで値オブジェクトはワイヤ上では構造体の包装なしに、**包んでいるプリミティブそのまま**で流れます。`TickNumber` はただの整数 1 つです。値オブジェクトの話は [UnitGenerator のページ](../unitgenerator/)に続きます。
+
+RPC の外にも MessagePack の出番が 1 つあります。ゲーム定数を収める MasterMemory のデータバイナリも MessagePack フォーマットなので、契約とマスターデータが同じ直列化基盤を共有しています。そちらは [MasterMemory のページ](../mastermemory/)の持ち分です。
+
+## あわせて読む
+
+- [MagicOnion](../magiconion/): このペイロードを載せて運ぶ RPC フレームワーク
+- [アーキテクチャ概要](../../architecture/): これらの契約が行き交う 3 種類の経路

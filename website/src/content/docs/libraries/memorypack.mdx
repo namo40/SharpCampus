@@ -1,0 +1,69 @@
+---
+title: MemoryPack
+description: The zero-encoding serializer that writes C# memory layout almost as-is. Why it was chosen for a Redis cache only servers read and write.
+sidebar:
+  order: 12
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+MemoryPack is Cysharp's binary serializer, and "zero encoding" is its identity: instead of converting fields one by one behind type tags, it reads and writes a C# object's memory layout almost verbatim, which makes it a step faster than even MessagePack. It is designed source-generator-only — there is no reflection path at all — and its requirements are just as clear-cut: it runs on .NET 7 or newer only. The version is 1.21.4.
+
+- GitHub: [Cysharp/MemoryPack](https://github.com/Cysharp/MemoryPack)
+
+## Why this library
+
+Choosing a serializer is a question of who sits at each end. The contracts exchanged with clients belong to [MessagePack](../messagepack/), a format with a published spec and no platform bias. The leaderboard cache is different: while it sits in Redis, only our own server processes ever read or write it. When both ends are the same .NET servers, there is no cross-platform obligation — the only criterion left is speed. So the fastest serializer takes that seat.
+
+Its footprint in this project is a single cache, but the selection principle — *the nature of the boundary picks the serializer* — is what this page is really about.
+
+## A cache-only type: the contract is not reused
+
+The type that sits in the cache is one partial record with `[MemoryPackable]`:
+
+```csharp
+// The cache's own wire format, mirroring the contract DTO rather than reusing it: MemoryPack needs
+// .NET 7 or newer and SharpCampus.Shared is built for netstandard2.1, so what crosses the wire to a
+// client and what sits in Redis between servers are serialized by different libraries on purpose.
+[MemoryPackable]
+internal sealed partial record CachedLeaderboardEntry(int Rank, string Nickname, int Score);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Leaderboards/CachedLeaderboardEntry.cs" />
+
+The contracts already have an identically shaped `LeaderboardEntry`, yet it is mirrored instead of reused. `SharpCampus.Shared`, where the contracts live, builds for netstandard2.1 with future Unity sharing in mind, and MemoryPack demands .NET 7 or newer. The result — the wire to clients serialized by MessagePack, the Redis hop between servers by MemoryPack — is not a workaround but a deliberate separation: the cache format is not a contract, so it has no reason to be tied to the contract assembly.
+
+## Reading and writing the cache
+
+Usage is two static methods. The assembled leaderboard page is serialized whole into a single Redis string, and turned back on the way out:
+
+```csharp
+public sealed class RedisLeaderboardCache(IConnectionMultiplexer redis) : ILeaderboardCache
+{
+    // Expiry is the only invalidation there is, so this window is what a settlement can be behind by:
+    // for up to five seconds a page still lists the places, and the nicknames, it was assembled from.
+    private static readonly TimeSpan _lifetime = TimeSpan.FromSeconds(5);
+
+    public async Task<LeaderboardEntry[]?> GetTopAsync(string board)
+    {
+        var value = await redis.GetDatabase().StringGetAsync(LeaderboardKeys.Cache(board));
+        if (value.IsNullOrEmpty)
+        {
+            return null;
+        }
+
+        var cached = MemoryPackSerializer.Deserialize<CachedLeaderboardEntry[]>(((ReadOnlyMemory<byte>)value).Span);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Leaderboards/RedisLeaderboardCache.cs" />
+
+`MemoryPackSerializer.Serialize` yields a `byte[]`, `Deserialize` takes a `Span` — a symmetric, configuration-free API. No resolver and no options object appear, because the source generator settles every type's formatter at compile time.
+
+## Expiry stands in for invalidation
+
+The cache lives for five seconds, and that is the only invalidation there is. A settlement that changes the rankings never comes back to purge the cache, so a page can trail a settlement by up to five seconds. The top 100 is not per-account data — everyone sees the same page — so accepting that lag is the price for keeping a burst of reads from turning into Redis sorted-set operations and bulk nickname lookups. Where the cache's writers and readers sit in the larger flow is covered by the [settlement events chapter](../../architecture/settlement/).
+
+## See also
+
+- [MessagePack-CSharp](../messagepack/): the contract-side serializer, and how the two libraries divide the work
+- [Settlement events](../../architecture/settlement/): the leaderboard update flow this cache sits in

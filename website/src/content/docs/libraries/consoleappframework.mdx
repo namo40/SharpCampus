@@ -1,0 +1,176 @@
+---
+title: ConsoleAppFramework
+description: The source-generated CLI framework where one method is one command. The verification CLI's sixteen commands and its REPL assembly.
+sidebar:
+  order: 14
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+ConsoleAppFramework turns C# methods into CLI commands. Version 5 is a full rewrite on a source generator: zero runtime dependencies, and an argument-parsing path that allocates nothing. This project's verification CLI, `SharpCampus.Cli` — sixteen commands spanning accounts, the shop, missions, rankings and duels — is built on it. The version is 5.7.13.
+
+- GitHub: [Cysharp/ConsoleAppFramework](https://github.com/Cysharp/ConsoleAppFramework)
+
+## Why this library
+
+CLI frameworks usually have you hand-assemble an object graph describing commands and options, or read method signatures through runtime reflection. ConsoleAppFramework inverts the approach: **the method signature is the command definition**, and reading that signature to produce parsing code happens at compile time. A console app cold-starts on every run, so startup overhead is felt directly — with no reflection the launch stays light, and Native AOT works as-is.
+
+The package reference tells the story by itself:
+
+```xml
+<PackageReference Include="ConsoleAppFramework">
+  <PrivateAssets>all</PrivateAssets>
+  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+</PackageReference>
+```
+
+<SourceLink path="src/SharpCampus.Cli/SharpCampus.Cli.csproj" />
+
+It is referenced purely as an analyzer (the source generator), so no ConsoleAppFramework assembly exists in the build output at all. The framework lives as generated code inside your own assembly rather than as a DLL beside it.
+
+## The entry point: one Create, no registration code
+
+The opening of `Program.cs`:
+
+```csharp
+// Every client and hub this process creates has to read the same MessagePack shapes the servers write.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// The culture has to be set before any command runs, so the option is consumed here rather than
+// declared on every command.
+args = Localization.Apply(args);
+
+// Command classes register themselves through [RegisterCommands]; nothing is added by hand here.
+var app = ConsoleApp.Create();
+
+if (args.Length > 0)
+{
+    await app.RunAsync(args);
+    return;
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Program.cs" />
+
+Not a single line after `ConsoleApp.Create()` registers a command. The source generator finds every class marked `[RegisterCommands]` at compile time and wires it up; adding a new command file is the whole act of registering it.
+
+The line that touches `args` before `Create` deserves a look too. The language-switch option is common to every command, so instead of declaring it on each one, `Localization.Apply` consumes it first and hands the framework only what remains. Slotting pre-processing around the framework this way is easy precisely because it is all just method calls.
+
+## Anatomy of a command: signature plus doc comments
+
+Here is `signup` from the account command class — the class itself carries nothing but `[RegisterCommands]`:
+
+```csharp
+/// <summary>Creates a Supabase account and signs in with it.</summary>
+/// <param name="email">Email address to register.</param>
+/// <param name="password">Password for the new account.</param>
+[Command("signup")]
+public async Task SignUpAsync([Argument] string email, [Argument] string password)
+{
+    var result = await SupabaseAuthClient.SignUpAsync(email, password);
+    if (result.AccessToken is null)
+    {
+        AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.SignUpFailed, result.ErrorMessage)}[/]");
+        return;
+    }
+
+    new ClientSession(result.AccessToken, email).Save();
+    AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.SignedUp, email)}[/]");
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Commands/AccountCommands.cs" />
+
+`[Command("signup")]` names the command and `[Argument]` declares positional arguments. There is no API for registering help text — **the XML doc comments become the help**. The actual output:
+
+```text
+Usage: signup [arguments...] [-h|--help] [--version]
+
+Creates a Supabase account and signs in with it.
+
+Arguments:
+  [0] <string>    Email address to register.
+  [1] <string>    Password for the new account.
+```
+
+Options and cancellation show up in the `duel` command's signature:
+
+```csharp
+/// <summary>Queues for a duel and plays the match out.</summary>
+/// <param name="auto">Plays the match with random inputs instead of the keyboard.</param>
+/// <param name="cancellationToken">Cancellation of the queue wait or the running match.</param>
+[Command("duel")]
+public async Task ExecuteAsync(bool auto = false, CancellationToken cancellationToken = default)
+```
+
+<SourceLink path="src/SharpCampus.Cli/Commands/DuelCommand.cs" />
+
+A parameter with a default value becomes an option, and a `bool` becomes a valueless flag (`--auto`). `CancellationToken` gets special treatment — absent from help, injected by the framework, and connected to console cancellation. Press Ctrl+C while waiting in the queue and instead of the process being cut down, this token cancels and the command's own code runs its cleanup path.
+
+The full list of the sixteen commands built this way is likewise generated from doc comments:
+
+```text
+Commands:
+  buy         Buys a skin with the coins matches have paid out.
+  claim       Takes the coins a mission you finished today pays.
+  duel        Queues for a duel and plays the match out.
+  equip       Equips a skin you own; both screens of your next match draw your board with it.
+  guest       Creates an anonymous account, so a player can start without an address to give.
+  history     Lists the matches you have finished, newest first.
+  link        Turns the guest account in the stored session into a permanent one.
+  login       Signs in to Supabase and stores the session for later commands.
+  logout      Discards the stored session.
+  missions    Lists today's missions with what you have done towards them.
+  nickname    Renames the profile the stored session belongs to.
+  rank        Shows the leading hundred of a board and where you stand on it.
+  signup      Creates a Supabase account and signs in with it.
+  skins       Lists every skin with its price and whether you own it.
+  status      Queries every SharpCampus server for its name, version and clock.
+  whoami      Asks the ApiServer which account the stored session belongs to.
+```
+
+## The REPL: the same app, line by line
+
+Run the CLI with no arguments and it shows a prompt, feeding each entered line back through the same `app`:
+
+```csharp
+while (true)
+{
+    // Console.ReadLine keeps the console host's built-in line editing and history, which a Spectre prompt would replace.
+    AnsiConsole.Markup("[green]cli>[/] ");
+
+    var line = Console.ReadLine();
+    if (line is null)
+    {
+        break;
+    }
+
+    var commandArgs = CommandLineParser.SplitCommandLine(line).ToArray();
+    if (commandArgs.Length == 0)
+    {
+        continue;
+    }
+
+    if (string.Equals(commandArgs[0], "exit", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandArgs[0], "quit", StringComparison.OrdinalIgnoreCase))
+    {
+        break;
+    }
+
+    // Keep the service provider alive across iterations: it will hold the interactive session state.
+    await app.RunAsync(commandArgs, disposeServiceProvider: false);
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Program.cs" />
+
+ConsoleAppFramework has no built-in REPL mode. But `RunAsync` is not a framework entry point that seizes the process — it is a method that takes an argument array and runs one command — so a loop like this assembles naturally in user code. Splitting a line into arguments borrows System.CommandLine's parser (`SplitCommandLine`), and `disposeServiceProvider: false` keeps service lifetimes alive between iterations.
+
+## Where it is not used
+
+The game-only console client (`SharpCampus.Client`) carries no ConsoleAppFramework: launched, it drops straight into a single game flow, so there is no command surface to manage. Only the tool with many combinable commands — the verification CLI — has a command framework. The live duel screen the `duel` command brings up belongs to `Client.Common`, shared by both clients, and its rendering story is on the [ZString](../zstring/) page.
+
+## See also
+
+- [MagicOnion](../magiconion/): the RPC clients these commands call inside
+- [ZLogger](../zlogger/): the same tooling axis, on the server side

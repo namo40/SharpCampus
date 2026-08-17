@@ -1,0 +1,51 @@
+---
+title: SharpCampus
+description: MagicOnionとCysharpエコシステムで学ぶゲームサーバー開発。
+template: splash
+hero:
+  tagline: "MagicOnionとCysharpエコシステムで学ぶゲームサーバー開発。完成した1対1のテトロミノ対戦サーバーが教材です。"
+  actions:
+    - text: はじめる
+      link: /ja/getting-started/
+      icon: right-arrow
+    - text: アーキテクチャ
+      link: /ja/architecture/
+      icon: right-arrow
+      variant: minimal
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+import AsciinemaPlayer from '../../../components/AsciinemaPlayer.astro';
+
+## デモ
+
+<AsciinemaPlayer src="casts/duel.cast" poster="npt:0:33" />
+
+編集なしの実プレイ録画です。ゲスト2人がログインしてマッチメイキングキューで出会い、その後の重力・回転・ライン消去・おじゃま判定はすべてサーバーが毎秒20ティックでシミュレートします。クライアントが送るのはキー入力だけです。
+
+## SharpCampusとは？
+
+SharpCampusはゲームサーバー開発の学習プロジェクトです。MagicOnionとCysharpエコシステムで作った1対1の落ち物ブロック対戦サーバーを完成形で提供し、このサイトがそのコードを基準に各ライブラリを解説します。
+
+おもちゃのサンプルではなく、ひとつの完結したコードベースを読みます。メタゲームとリアルタイム対戦を分担する2つのgRPCサーバー、相手がいないときに参戦するボットサーバー、ターミナルで動くコンソールクライアント、さらにDocker ComposeとKubernetesのデプロイまで、すべてが1つのリポジトリに入っています。
+
+## サーバー構成
+
+- **ApiServer**: アカウント・プロフィール・ショップ・ミッション・マッチメイキングを担うメタゲームサーバー
+- **RoomServer**: サーバー権威のティックループで対戦をシミュレートするリアルタイムサーバー
+- **BotServer**: キューに相手がいなければ通常クライアントと同じ経路で参戦するボットホスト
+- **コンソールクライアント**: ゲーム本体。ターミナル全体を使い、キーボードだけで操作
+- その前段にEnvoyの単一エントリポイント、後段にRedisとPostgreSQL（Supabase Auth）
+
+## 何で作られているか
+
+RPCとリアルタイムストリーミングは[MagicOnion](https://github.com/Cysharp/MagicOnion)の仕事です。その下では、ティックループ（LogicLooper）、ドメインイベント（MessagePipe）、リアクティブストリーム（R3）、マスターデータ（MasterMemory）、ロギング（ZLogger）をはじめとする14のライブラリがそれぞれの役割を担っています。どのライブラリがどこでなぜ使われているかは、ライブラリセクションで1本ずつ解説します。
+
+## 見てまわる
+
+<CardGrid>
+  <LinkCard title="はじめに" href="getting-started/" description="ソース実行、Docker Compose、Kubernetesの3部構成で実際に動かします。" />
+  <LinkCard title="アーキテクチャ" href="architecture/" description="2つのサーバーの分業、マッチメイキングパイプライン、ルームのライフサイクルを図で見ます。" />
+  <LinkCard title="ライブラリ" href="libraries/" description="14のライブラリを、このコードベースでの実際の使いどころを基準に解説します。" />
+  <LinkCard title="トピック解説" href="topics/" description="サーバー権威シミュレーション、再接続、精算など、ライブラリ横断のテーマを扱います。" />
+</CardGrid>

@@ -1,0 +1,20 @@
+---
+title: トピック解説
+description: 複数のライブラリを 1 つの原則で束ねて読む、横断的な解説 4 編。
+sidebar:
+  label: 概要
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+[ライブラリ解説](../libraries/)ではライブラリを 1 つずつ主役に据えました。このセクションは逆に、原則を 1 つずつ主役に据えます。「ティックループを塞がない」「コンパイル時に確定させる」といった原則はどれか 1 つのライブラリのものではなく、スタック全体を貫く設計態度です。個別ページに散らばったままでは断片としてしか見えないので、ここでの 4 編がその断片を束ね直します。
+
+<CardGrid>
+  <LinkCard title="並行性モデル" href="concurrency/" description="ルームサーバーにロックがほとんどない理由。状態ごとに所有スレッドを 1 つ決め、境界はすべてキューで渡す。" />
+  <LinkCard title="ソースジェネレーター" href="source-generators/" description="このスタックの半分はコンパイル時に書かれる。7 つのライブラリの生成物マップと、リフレクションから移行した理由。" />
+  <LinkCard title="ゼロアロケーション" href="zero-allocation/" description="常時回るホットパスから GC を追い出す共通技法 3 種と、プロジェクト自身のコードが同じ規律を守る箇所。" />
+  <LinkCard title="シリアライズ境界の地図" href="serialization-boundaries/" description="1 つのシステムに共存するフォーマット 4 種とその選択基準。RoomId がマッチの一生で着替える表現を追跡する。" />
+</CardGrid>
+
+各編は関連するライブラリページへ相互リンクを張っています。ライブラリが気になればそちらへ、ライブラリページを読んでいて全体像が欲しくなればこちらへ、と行き来しながら読む構成です。

@@ -1,0 +1,106 @@
+---
+title: MasterMemory
+description: The read-only in-memory database for game constants. A source generator builds the typed queries; validation finishes at startup.
+sidebar:
+  order: 7
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+MasterMemory is Cysharp's read-only in-memory database. Game balance data (master data) travels as a [MessagePack](../messagepack/) binary, loads into memory, and is read through typed queries a source generator builds for you. In SharpCampus it is home to every constant the simulation and the metagame use: the gravity curve, attack and combo tables, the skin catalog, mission definitions, and the economy row. The version is 3.0.4.
+
+- GitHub: [Cysharp/MasterMemory](https://github.com/Cysharp/MasterMemory)
+
+## Why this library
+
+There are usually three places to put balance constants. Hardcode them and every tuning pass is a recompile. Put them in the RDB and every read is a round trip, or a caching layer appears. MasterMemory is the third way: **manage the data as files, read it at runtime entirely from in-memory indexes.** In exchange for accepting read-only, queries cost about a dictionary lookup and the schema is pinned down as C# types.
+
+Anything with the same shape of problem could use it, but the library was born for game master data, so it fits single-row configs, range tables, and catalogs especially well.
+
+## Defining a table: a record with attributes
+
+One table is one record. The single-row table of simulation constants looks like this:
+
+```csharp
+[MemoryTable("game_config")]
+[MessagePackObject(true)]
+public sealed record GameConfig : IValidatable<GameConfig>
+{
+    public const int SingleRowId = 1;
+
+    [PrimaryKey] public int Id { get; init; }
+
+    /// <summary>Simulation ticks per second.</summary>
+    public int TickRate { get; init; }
+
+    // ...
+
+    /// <summary>Ticks a disconnected player keeps their seat.</summary>
+    public int GraceTicks { get; init; }
+
+    // ...
+}
+```
+
+<SourceLink path="src/SharpCampus.Shared/MasterData/GameConfig.cs" />
+
+Seeing `[MemoryTable]`, the source generator emits the `MemoryDatabase` class and per-table query APIs. `[PrimaryKey]` is both the lookup key and the sort order, and each table grows methods named after its key, like `TryFindBySkinId`:
+
+```csharp
+var catalog = masterData.SkinTable.All;
+
+// ...
+
+if (!masterData.SkinTable.TryFindBySkinId(skinId, out var skin))
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/ShopService.cs" />
+
+Generated tables are partial, so you can attach a hand-written half. The skin table finds the free skin once in `OnAfterConstruct` instead of rescanning the catalog on every account creation. <SourceLink path="src/SharpCampus.Shared/MasterData/Tables/SkinTable.cs" />
+
+## Validation happens at startup
+
+Each table implements `IValidatable<T>` to declare value ranges and shape — `GameConfig` checks that every number is positive and that there is exactly one row. Right after loading the data, the server runs `database.Validate()` and, on failure, **refuses to start**:
+
+```csharp
+var result = database.Validate();
+if (result.IsValidationFailed)
+{
+    throw new InvalidOperationException(
+        $"Master data in '{directory}' is invalid.{Environment.NewLine}{result.FormatFailedResults()}");
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/MasterData/MasterDataLoader.cs" />
+
+A server that boots on broken balance data dies at the first match anyway. Moving that death to startup is what this validation is for.
+
+## JSON as the source, binary as the shipment
+
+The master data source of truth is one JSON file per table in the `masterdata/` folder. During development the servers import that folder directly (<SourceLink path="src/SharpCampus.Shared/MasterData/Import/MasterDataImporter.cs" />); the container image carries a prebuilt MessagePack binary instead — the same bytes, built earlier. The loader looks next to the assembly: a directory means import, a file means load the binary, neither means refuse to start.
+
+## How constants reach the simulation
+
+The simulation core takes no dependency on master data. At RoomServer startup, one place turns tables into simulation constants:
+
+```csharp
+var config = database.GameConfigTable.All[0];
+
+// MasterMemory keeps each table sorted by its primary key, which is the level here and the
+// cleared line count below, so both project straight onto a zero-based lookup.
+var gravity = new int[database.GravityCurveTable.Count];
+for (var i = 0; i < gravity.Length; i++)
+{
+    gravity[i] = database.GravityCurveTable.All[i].TicksPerCell;
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/MasterData/SimulationConfigFactory.cs" />
+
+Primary-key ordering is guaranteed, so the per-level gravity table projects straight onto a zero-based array lookup. Every seconds-based value (countdown, rematch window) is converted to ticks here — past this point the only unit of time is the tick.
+
+## See also
+
+- [MessagePack-CSharp](../messagepack/): the serialization under this binary
+- [LogicLooper](../logiclooper/): the loop that runs at the tick rate defined here
+- [Architecture overview](../../architecture/): MasterMemory's place in the "where state lives" table

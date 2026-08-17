@@ -1,0 +1,82 @@
+---
+title: ZLinq
+description: 列挙子もデリゲートもヒープに作らない LINQ。入口の呼び出し 1 つだけを変えるドロップイン方式と、適用の境界線を扱います。
+sidebar:
+  order: 11
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ZLinq は、LINQ の表現力を保ったままアロケーションをなくした Cysharp のライブラリです。シーケンスに `AsValueEnumerable()` を付けると、その先の `Where`・`Select`・`MaxBy` のチェーンが、ヒープの列挙子オブジェクトの代わりに struct のチェーンとして組み立てられます。クエリ本文は標準 LINQ とまったく同じに読めます。バージョンは 1.5.6 です。
+
+- GitHub: [Cysharp/ZLinq](https://github.com/Cysharp/ZLinq)
+
+## なぜ使うのか
+
+標準 LINQ は演算子 1 つごとに列挙子オブジェクトを、ラムダがローカル変数を捕まえればクロージャまでヒープに作ります。一度きりの管理画面コードなら何の問題もありませんが、リクエストごと・スポーンごとに回るサーバー経路では、この小さなアロケーションが GC 圧として積み上がります。かといって全部 for ループにほどくと、「何を選ぶか」が「どう回すか」に埋もれてしまいます。
+
+ZLinq の答えがドロップインです。`AsValueEnumerable()` の呼び出し 1 つで同じチェーンが struct の上で回り、読む人にとっては変わらず LINQ です。`ReadOnlySpan` のような、標準 LINQ がそもそも受け取れないソースにもチェーンを掛けられます。
+
+## ボットが着地を選ぶ
+
+いちばん熱い使用場所は BotServer です。ボットはピースがスポーンするたびに、届くすべての着地を採点して最高点を選びます。その選択が `MaxBy` の 1 行です。
+
+```csharp
+    public static GameInput[] Plan(ReadOnlySpan<CellKind> cells, PieceKind kind)
+    {
+        var candidates = Placements.Enumerate(cells, kind);
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        // Ties go to the first pose enumerated, the way the hand-rolled scan settled them.
+        return Inputs(kind, candidates.AsValueEnumerable().MaxBy(Score));
+    }
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotPlanner.cs" />
+
+`Score` は静的メソッドグループなのでクロージャもありません。数十の候補を巡って最大値を探すこの呼び出しは、ボットのピース 1 つごとに実行されますが、ヒープには何も残しません。
+
+## サーバーの照会経路
+
+ApiServer の照会サービスは、DB や Redis から取り出した配列をレスポンス DTO に整える中間段階で ZLinq を使います。リーダーボードは上位 100 名の ID をニックネーム照会用のセットに抜き出しますが、コレクション式のスプレッドと自然につながります。
+
+```csharp
+        HashSet<UserId> ids = [.. top.AsValueEnumerable().Select(row => row.UserId)];
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/LeaderboardService.cs" />
+
+対戦履歴は、相手のいた試合だけを絞って相手の ID を集めます。
+
+```csharp
+        HashSet<UserId> opponents =
+        [
+            .. rows.AsValueEnumerable()
+                .Where(row => row.OpponentId.HasValue)
+                .Select(row => row.OpponentId!.Value),
+        ];
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/MatchHistoryService.cs" />
+
+ルームサーバーのレジストリは、Redis ハッシュのフィールド配列をディクショナリーに変えます。
+
+```csharp
+        var values = fields.AsValueEnumerable().ToDictionary(field => field.Name.ToString(), field => field.Value);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Rooms/RedisRoomRegistry.cs" />
+
+このほか、ミッション一覧が進捗の行を `FirstOrDefault` で探す場所まで、サーバーのインメモリシーケンス加工はすべて同じパターンです。
+
+## どこに使わないか
+
+EF Core のクエリには使いません。`db.Profiles.Where(...)` の LINQ は実行ではなく、**SQL に翻訳される式ツリー**を作ることが目的なので、`IQueryable` 拡張である標準 LINQ がその場所の主です。ZLinq が置き換えるのは、すでにメモリに載ったシーケンスの走査です。この区別が立っているので、ショップリポジトリのクエリは標準 LINQ のまま残り、その結果を整えるサービス層が ZLinq を使います。
+
+## あわせて読む
+
+- [ZString](../zstring/): 同じ哲学を文字列組み立てに適用した姉妹ライブラリ
+- [アーキテクチャ概要](../../architecture/): これらの照会経路が置かれた場所

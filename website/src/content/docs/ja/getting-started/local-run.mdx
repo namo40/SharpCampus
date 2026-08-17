@@ -1,0 +1,115 @@
+---
+title: "第1部: ソースから実行"
+description: 認証・DB・Redisをコンテナで立ち上げ、3つのサーバーをソースから実行して最初の対戦をプレイします。
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import SourceLink from '../../../../components/SourceLink.astro';
+
+リポジトリを取得した直後の開発フローです。サーバーコードはすべて`dotnet run`で実行するので、修正と再起動が最速で回ります。終わる頃には、ローカルでボットを相手に1試合プレイしています。
+
+## 1. 認証とデータベースを立ち上げる
+
+アカウントはSupabase Authが担います。まずローカルスタックを立ち上げます。PostgresとAuth APIがDockerで起動し、サーバーとクライアントはこのスタックが出力するローカルデモ用キーにあらかじめ合わせてあります。
+
+```bash
+supabase start
+```
+
+マッチメイキングキューとルームレジストリはRedisに保存されます。SupabaseスタックにRedisは含まれないので、別途1つ立ち上げます。
+
+```bash
+docker run -d --name sharpcampus-redis -p 6379:6379 redis:8
+```
+
+プロフィールと対戦履歴は同じPostgresの中の、ゲーム専用テーブルに保存されます。スキーマは単一ファイル<SourceLink path="deploy/db/schema.sql" />で、テーブルを削除してから作り直すため、同じコマンドの再実行がそのままDBリセットになります。
+
+<Tabs>
+  <TabItem label="PowerShell">
+    ```powershell
+    Get-Content deploy/db/schema.sql | docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres
+    ```
+  </TabItem>
+  <TabItem label="POSIXシェル">
+    ```bash
+    docker exec -i supabase_db_SharpCampus psql -U postgres -d postgres < deploy/db/schema.sql
+    ```
+  </TabItem>
+</Tabs>
+
+## 2. ゲームバランスはmasterdata/に
+
+ティックレート、重力カーブ、攻撃・コンボテーブル、報酬とレーティング定数、スキンとミッションまで、ゲームの数値はすべて`masterdata/`フォルダのJSONです（例: <SourceLink path="masterdata/game_config.json" />）。サーバーは起動時にこれらのファイルを読み込むので、値を修正して再起動するだけでバランスパッチになります。コンテナイメージに載せるデータベースへコンパイルするツールもありますが、ローカル実行には不要です。
+
+## 3. 3つのサーバーを実行する
+
+ターミナル3つに1つずつ立ち上げます。
+
+```bash
+dotnet run --project src/SharpCampus.ApiServer
+```
+
+```bash
+dotnet run --project src/SharpCampus.RoomServer
+```
+
+```bash
+dotnet run --project src/SharpCampus.BotServer
+```
+
+- **ApiServer**: アカウント確認、プロフィール、ショップとミッション、マッチメイキング。クライアントが最初に接続する相手です。
+- **RoomServer**: 対戦1つがルーム1つ。サーバー権威のティックループでゲームをシミュレートします。
+- **BotServer**: キューで長く待つ人が出ると、ボットをログインさせて同じキューに送り込みます。
+
+各サーバーはクライアント向けgRPCポートの隣に運用用HTTPポートを1つずつ開きます（5011・5012・5013）。`/healthz`はプロセスが生きている限り応答し、`/readyz`はRedisとPostgresへの接続まで確認し、`/metrics`はPrometheusのスクレイプです。
+
+## 4. 最初の対戦
+
+ゲームクライアントはターミナル全体を使います。
+
+```bash
+dotnet run --project src/SharpCampus.Client
+```
+
+タイトル画面で**Play as guest**を選べば、メールアドレスなしでロビーに入れます。**Play a duel**でキューに入ると（Escで離脱）、開発設定では15秒ほどでボットが対戦相手として現れます。ボットも自分のアカウントでログインし、あなたと同じ3つの呼び出しでキューに並ぶので、サーバーから見ればただのもう1つのクライアントにすぎません。
+
+| キー | 動作 |
+| --- | --- |
+| ← / → | 移動 |
+| ↓ | ソフトドロップ |
+| Z / X | 回転 |
+| Space | ハードドロップ |
+| C | ホールド |
+| Q | 投了 |
+
+対戦が終わるとコインとレーティングが両者のプロフィールに精算され、リマッチの提案にどちらで答えてもロビーに戻ります。
+
+## 5. REPLでサーバーAPIを一巡する
+
+もう1つのクライアント`SharpCampus.Cli`は、ゲームが行うすべてのサーバー呼び出しをコマンド1つずつとして公開するREPLです。ゲームクライアントが内部で何を呼んでいるのか見たいときはこちらを使います。
+
+```bash
+dotnet run --project src/SharpCampus.Cli
+```
+
+```text
+cli> guest
+cli> whoami
+cli> nickname boardsweeper
+cli> duel
+cli> history
+cli> rank
+```
+
+`guest`は匿名ログインでセッションファイルを作り、`whoami`はそのトークンをApiServerに送って背後のアカウントとプロフィールを受け取ります。`duel`はキュー参加から対戦画面まで、ゲームと同じ経路をそのまま通ります。コマンドの全一覧は`help`で見られます。
+
+## 6. 後片付け
+
+```bash
+supabase stop
+docker rm -f sharpcampus-redis
+```
+
+次は[第2部: Docker Compose](../docker-compose/)です。同じサーバー群を、実際のデプロイ形態のまま、コンテナと単一エントリポイントの後ろで立ち上げます。

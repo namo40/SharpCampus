@@ -1,0 +1,114 @@
+---
+title: 제로 할당
+description: 항상 도는 핫 패스에서 GC를 몰아내는 Cysharp 공통 기법 3종과, 프로젝트 자체 코드가 같은 규율을 지키는 지점들을 다룹니다.
+sidebar:
+  order: 4
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+Cysharp 라이브러리들의 이름에는 Z가 자주 붙습니다. [ZString](../../libraries/zstring/), [ZLogger](../../libraries/zlogger/), [ZLinq](../../libraries/zlinq/)의 Z는 Zero Allocation의 Z입니다. 이 편은 그 라이브러리들이 공유하는 기법을 한자리에 모으고, 라이브러리를 쓰는 것만으로는 끝나지 않는 이야기, 즉 호출하는 쪽 코드가 지켜야 하는 같은 규율까지 따라갑니다.
+
+## 왜 할당이 문제인가
+
+.NET에서 힙 할당 자체는 포인터 하나 밀어 두는 수준으로 쌉니다. 비용은 나중에, 가비지 컬렉션으로 청구됩니다. 세대 0 수집이 아무리 짧아도 멈춤은 멈춤이고, **수집의 빈도는 할당의 속도에 비례**합니다. 그래서 같은 할당이라도 어디서 하느냐가 문제를 가릅니다. 요청당 1번 도는 코드의 임시 객체 몇 개는 아무 일도 아니지만, 항상 도는 코드의 임시 객체는 부하에 정비례해 쌓이는 GC 압력이 됩니다.
+
+이 프로젝트에서 "항상 도는" 자리는 3곳입니다.
+
+- **서버 틱**: 룸마다 초당 20틱. 룸 수백 개가 곱해집니다.
+- **클라이언트 렌더러**: 초당 20프레임, 프레임마다 셀 400개.
+- **로깅**: 서버가 살아 있는 동안 전부.
+
+셋 다 멈춤에 민감한 자리입니다. 틱 스레드가 수집에 멈추면 룸 전체의 틱이 밀리고, 렌더러가 멈추면 화면이 덜컥거립니다.
+
+## 기법 1: 빌린 버퍼에 쓰고, 결과만 할당한다
+
+문자열 조립의 임시 문자열들이 첫 표적입니다. ZString의 struct 빌더는 `ArrayPool`에서 빌린 버퍼에 쓰다가 마지막 `ToString()` 1회만 할당하고, 버퍼는 풀로 돌려줍니다. 이 프로젝트에서는 클라이언트 렌더러가 프레임 전체(두 보드, HUD, 키 안내)를 이 방식으로 조립해, 프레임당 할당을 결과 문자열 하나로 줄입니다. 빌더가 클래스가 아니라 **가변 struct**라서 `ref`로만 건네야 한다는 실전 규칙까지, 상세는 [ZString 페이지](../../libraries/zstring/)에 있습니다.
+
+핵심은 "빌려 쓰고 돌려준다"가 문자열만의 이야기가 아니라는 점입니다. 풀에서 빌린 메모리에 작업하고 완성본만 할당하는 이 모양은, 아래에서 보듯 직렬화와 프로젝트 자체 코드에도 똑같이 나타납니다.
+
+## 기법 2: 문자열을 거치지 않고 UTF8로 바로 쓴다
+
+콘솔이든 파일이든 로그의 최종 목적지는 UTF8 바이트입니다. 표준 로깅 경로는 UTF16 문자열을 만들고 값 타입을 박싱해 담았다가 출력 직전에 인코딩하는데, ZLogger는 이 왕복을 통째로 없애고 파라미터를 UTF8 버퍼에 바로 씁니다. 만들 필요가 없는 중간 표현은 할당할 필요도 없다는 접근입니다. `[ZLoggerMessage]` 소스 제너레이터가 이 기록 코드를 컴파일 타임에 만들어 두는 구조는 [ZLogger 페이지](../../libraries/zlogger/)가 다룹니다.
+
+같은 원리는 와이어에도 있습니다. [MessagePack](../../libraries/messagepack/)과 [MemoryPack](../../libraries/memorypack/)의 직렬화도 중간 표현 없이 출력 버퍼에 바이너리를 직접 쓰는 경로라, 매 틱 나가는 델타 브로드캐스트가 문자열 조립 없이 바이트로 완성됩니다.
+
+## 기법 3: struct로 도는 열거자
+
+표준 LINQ는 연산자마다 이너레이터 객체를, 변수를 붙잡는 람다마다 클로저를 힙에 만듭니다. ZLinq는 같은 연산자를 struct 열거자 체인으로 다시 구현해 이 할당을 없앱니다. 이 프로젝트의 가장 뜨거운 사용처는 봇이 조각 스폰마다 도는 착지 채점(`MaxBy` 한 줄)이고, 조회 서비스들의 응답 다듬기가 그 뒤를 잇습니다. 사용처 목록과 "EF 쿼리에는 쓰지 않는다"는 경계선은 [ZLinq 페이지](../../libraries/zlinq/)에 있습니다.
+
+## 라이브러리 밖: 호출부의 같은 규율
+
+라이브러리가 제로 할당이어도 호출부가 호출마다 배열을 만들면 이득은 사라집니다. 이 프로젝트의 자체 코드가 같은 규율을 지키는 지점들을 보면, 먼저 시뮬레이션의 입력 전달 경로 전체가 `Span` 기반입니다.
+
+```csharp
+    public DuelTickResult Tick(ReadOnlySpan<GameInput> inputs1, ReadOnlySpan<GameInput> inputs2)
+```
+
+<SourceLink path="src/SharpCampus.GameCore/DuelSimulation.cs" />
+
+그리고 룸이 매 틱 이 시그니처에 입력을 밀어 넣는 쪽은, 틱마다 새 배열을 만드는 대신 룸 생성 때 잡아 둔 버퍼를 재사용합니다.
+
+```csharp
+    private ReadOnlySpan<GameInput> TakeInputs(int playerIndex)
+    {
+        var queued = _queuedInputs[playerIndex];
+        var buffer = _tickInputs[playerIndex];
+        var count = Math.Min(queued.Count, buffer.Length);
+        for (var i = 0; i < count; i++)
+        {
+            buffer[i] = queued[i];
+        }
+
+        // Anything past the allowance is dropped rather than carried over: a flood must not buy a
+        // player extra actions on later ticks.
+        queued.Clear();
+        return buffer.AsSpan(0, count);
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+버퍼 크기가 틱당 입력 상한과 같아서 재사용이 성립합니다. 기법 1의 "빌린 버퍼" 자리에 "미리 잡아 둔 버퍼"가 들어간 변형입니다. 한 번 쓰고 버릴 8바이트라면 힙 대신 스택도 됩니다. 시드 생성이 그 예입니다.
+
+```csharp
+    private static ulong NewSeed()
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(ulong)];
+        RandomNumberGenerator.Fill(bytes);
+        return BinaryPrimitives.ReadUInt64LittleEndian(bytes);
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+측정조차 이 규율 아래 있습니다. 매 틱의 소요 시간 계측이 루프 스레드에 앉아 있을 수 있는 근거가 주석에 적혀 있습니다.
+
+```csharp
+    // How much of the tick budget a room spends is what says whether this process can take another one,
+    // so every tick is measured. Reading the timestamps allocates nothing and costs less than the tick
+    // itself, which is what lets the measurement sit on the loop thread.
+    private bool Tick(DuelRoom room)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var running = room.Tick();
+
+        metrics.RecordTick(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return running;
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/RoomManager.cs" />
+
+`Stopwatch.StartNew()`는 인스턴스를 할당하지만, `GetTimestamp()`는 숫자 하나 읽는 정적 호출입니다. 핫 패스의 계측은 계측 자체가 관측 대상을 오염시키지 않아야 한다는, 작지만 같은 원칙입니다.
+
+## 어디서 멈추나
+
+이 규율은 전면 적용이 아닙니다. 요청당 1번 도는 메타게임 서비스는 표준 LINQ와 EF가 만드는 임시 객체를 그대로 씁니다. 한 번의 로그인에서 임시 객체 몇 개를 아끼는 것은 측정할 수 없는 이득이고, 그 대가로 코드가 낯설어지는 것은 측정할 수 있는 손해이기 때문입니다. 기준은 하나입니다. **부하에 비례해 도는 코드인가.** 그렇다면 위의 기법들이 들어가고, 아니라면 평범하게 씁니다. 최적화가 규율이 되려면 적용 범위부터 규율이어야 합니다.
+
+## 더 보기
+
+- [ZString](../../libraries/zstring/): 기법 1의 본산, 렌더러의 프레임 조립
+- [ZLogger](../../libraries/zlogger/): 기법 2의 본산, UTF8 직접 기록
+- [ZLinq](../../libraries/zlinq/): 기법 3의 본산과 적용 경계
+- [LogicLooper](../../libraries/logiclooper/): 이 모든 규율의 이유인 틱 예산

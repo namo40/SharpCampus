@@ -1,0 +1,62 @@
+---
+title: "第3部: kindで動かすKubernetes"
+description: 3ノード構成のローカルクラスタに全スタックを載せ、ローリングアップデートのドレイニングまで確認します。
+sidebar:
+  order: 4
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+今回は[kind](https://kind.sigs.k8s.io/)でローカルに3ノード構成のクラスタを作り、同じイメージを同じEnvoyエントリポイントの後ろにそのまま載せます。この構成は完全に自己完結しています。PostgreSQLとSupabase Auth（GoTrue）がクラスタ内でサーバー群と一緒に動くため、第1部・第2部と違ってホストの`supabase start`スタックは不要です。
+
+むしろ動いていてはいけません。クラスタが自前の認証エンドポイント用にホストポート54321を使うので、立ち上がっているならまず`supabase stop`してください。Docker Desktopはイメージのビルドにだけ使い、それ以外に必要なのはkindとkubectlだけです。
+
+## 1. クラスタを立ち上げる
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml build
+kind create cluster --config deploy/k8s/kind-cluster.yaml
+kind load docker-image sharpcampus-apiserver sharpcampus-roomserver sharpcampus-botserver --name sharpcampus
+kubectl apply -f deploy/k8s/manifests/
+kubectl create configmap sharpcampus-schema --from-file=schema.sql=deploy/db/schema.sql -n sharpcampus
+kubectl get pods -n sharpcampus
+```
+
+クラスタ構成は<SourceLink path="deploy/k8s/kind-cluster.yaml" />、マニフェストは`deploy/k8s/manifests/`にあります。ゲームスキーマはここでも同じ単一ファイルのままなので、`kubectl create configmap`の1行がそのファイルをクラスタに渡します。データベースのPodはこのconfigmapを待ってから、初回起動でスキーマを適用します。
+
+すべてのPodが準備完了になるとおおよそ次のように見えます。対戦サーバー2台がStatefulSet（`room-0`・`room-1`）になったのがComposeとの違いです。
+
+```text
+NAME                            READY   STATUS    RESTARTS   AGE
+api-679486cc75-cjrhj            1/1     Running   0          2m
+api-679486cc75-pmf7r            1/1     Running   0          2m
+bot-77cc5cc7cd-mtf8m            1/1     Running   0          2m
+envoy-75d5578c4b-nzmt4          1/1     Running   0          2m
+redis-6f4cd995f5-9xhww          1/1     Running   0          2m
+room-0                          1/1     Running   0          2m
+room-1                          1/1     Running   0          2m
+supabase-auth-9457f8f84-nxlt8   2/2     Running   0          2m
+supabase-db-0                   1/1     Running   0          2m
+```
+
+## 2. 接続はそのまま
+
+クラスタがエントリポイントを同じホストポートにマップするので、クライアントは第2部とまったく同じく`SHARPCAMPUS_SERVER=http://localhost:5000`で接続します。サインアップとログインもそのままです。認証がクライアントの既に使うホストポート（54321）で応答するからです。
+
+## 3. この構成のハイライト: 対戦を切らないローリングアップデート
+
+この構成の真価はローリングアップデートで分かります。
+
+```bash
+kubectl rollout restart statefulset/room -n sharpcampus
+```
+
+対戦サーバーは1台ずつ入れ替わりますが、入れ替えられるサーバーは止まる代わりに**ドレイニング**します。まずマッチメイキングから抜け、進行中の対戦を最後まで終えてから終了します。その間、新しい対戦はもう1台の対戦サーバーに割り当てられ続けるので、ローリングアップデートが進行中の対戦を切ることはありません。対戦を1つ始めてから再起動をかければ、実際に確認できます。ドレイニングの挙動は<SourceLink path="deploy/k8s/manifests/40-room.yaml" />のマニフェストとRoomServerの終了処理が一緒に作っています。
+
+## 4. 後片付け
+
+```bash
+kind delete cluster --name sharpcampus
+```
+
+ここまでがはじめにのガイドです。このスタックがなぜこう分かれているのかは[アーキテクチャ](../../architecture/)で、各ライブラリがコードのどこで使われているかは[ライブラリ](../../libraries/)で続きます。

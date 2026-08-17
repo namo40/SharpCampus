@@ -1,0 +1,106 @@
+---
+title: MasterMemory
+description: 게임 상수를 담는 읽기 전용 인메모리 데이터베이스. 타입드 쿼리는 소스 제너레이터가 만들고, 검증은 기동 시에 끝냅니다.
+sidebar:
+  order: 7
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MasterMemory는 Cysharp의 읽기 전용 인메모리 데이터베이스입니다. 게임의 밸런스 데이터(마스터 데이터)를 [MessagePack](../messagepack/) 바이너리로 싣고 다니다가 메모리에 올려, 소스 제너레이터가 만들어 준 타입드 쿼리로 읽습니다. SharpCampus에서는 중력 곡선, 공격·콤보 테이블, 스킨 카탈로그, 미션 정의, 경제 상수까지 시뮬레이션과 메타게임이 쓰는 모든 상수의 집입니다. 버전은 3.0.4입니다.
+
+- GitHub: [Cysharp/MasterMemory](https://github.com/Cysharp/MasterMemory)
+
+## 왜 쓰나
+
+밸런스 상수를 두는 곳의 선택지는 보통 셋입니다. 코드에 하드코딩하면 기획 조정마다 재컴파일이고, RDB에 두면 읽기마다 왕복이거나 캐시 계층이 하나 생깁니다. MasterMemory는 세 번째 길입니다. **데이터는 파일로 관리하되, 실행 중에는 전부 메모리에서 인덱스로 읽는다.** 읽기 전용이라는 제약을 받아들이는 대가로, 쿼리는 딕셔너리 조회 수준의 비용이 되고 스키마는 C# 타입으로 고정됩니다.
+
+같은 문제를 겪는 자리라면 어디든 쓸 수 있지만, 이 라이브러리가 태어난 곳이 게임의 마스터 데이터라서 단일행 설정, 구간 테이블, 카탈로그 같은 게임형 데이터에 특히 잘 맞습니다.
+
+## 테이블 정의: 애트리뷰트 붙은 record
+
+테이블 하나가 record 하나입니다. 시뮬레이션 상수를 담는 단일행 테이블을 보면 이렇습니다.
+
+```csharp
+[MemoryTable("game_config")]
+[MessagePackObject(true)]
+public sealed record GameConfig : IValidatable<GameConfig>
+{
+    public const int SingleRowId = 1;
+
+    [PrimaryKey] public int Id { get; init; }
+
+    /// <summary>Simulation ticks per second.</summary>
+    public int TickRate { get; init; }
+
+    // ...
+
+    /// <summary>Ticks a disconnected player keeps their seat.</summary>
+    public int GraceTicks { get; init; }
+
+    // ...
+}
+```
+
+<SourceLink path="src/SharpCampus.Shared/MasterData/GameConfig.cs" />
+
+`[MemoryTable]`을 본 소스 제너레이터가 `MemoryDatabase` 클래스와 테이블별 쿼리 API를 생성합니다. `[PrimaryKey]`는 기본 조회 키이자 정렬 순서가 되고, 키 이름을 딴 `TryFindBySkinId` 같은 메서드가 테이블마다 생깁니다.
+
+```csharp
+var catalog = masterData.SkinTable.All;
+
+// ...
+
+if (!masterData.SkinTable.TryFindBySkinId(skinId, out var skin))
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Services/ShopService.cs" />
+
+생성된 테이블은 partial이라 손으로 쓴 반쪽을 붙일 수도 있습니다. 스킨 테이블은 `OnAfterConstruct`에서 "무료 스킨"을 한 번만 찾아 두어, 계정 생성 때마다 카탈로그를 다시 뒤지지 않습니다. <SourceLink path="src/SharpCampus.Shared/MasterData/Tables/SkinTable.cs" />
+
+## 검증은 기동 시에
+
+각 테이블은 `IValidatable<T>`를 구현해 값 범위와 형상을 선언합니다. `GameConfig`라면 모든 수치가 양수인지, 행이 정확히 1개인지까지 검사합니다. 서버는 데이터를 올린 직후 `database.Validate()`를 돌리고, 실패하면 **기동을 거부합니다**.
+
+```csharp
+var result = database.Validate();
+if (result.IsValidationFailed)
+{
+    throw new InvalidOperationException(
+        $"Master data in '{directory}' is invalid.{Environment.NewLine}{result.FormatFailedResults()}");
+}
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/MasterData/MasterDataLoader.cs" />
+
+밸런스 데이터가 깨진 채 뜬 서버는 어차피 첫 매치에서 죽습니다. 그 죽음을 기동 시점으로 앞당기는 것이 이 검증의 역할입니다.
+
+## 소스는 JSON, 배포는 바이너리
+
+마스터 데이터의 원본은 `masterdata/` 폴더의 테이블별 JSON 파일입니다. 개발 중에는 서버가 이 폴더를 직접 임포트하고(<SourceLink path="src/SharpCampus.Shared/MasterData/Import/MasterDataImporter.cs" />), 컨테이너 이미지에는 미리 빌드한 MessagePack 바이너리가 실립니다. 같은 바이트를 언제 만드느냐만 다릅니다. 로더는 어셈블리 옆에서 폴더를 찾으면 임포트, 파일을 찾으면 바이너리 로드, 둘 다 없으면 기동 거부입니다.
+
+## 상수가 시뮬레이션에 닿는 길
+
+시뮬레이션 코어는 마스터 데이터에 의존하지 않습니다. RoomServer가 시작할 때 한 곳에서 테이블을 시뮬레이션 상수로 바꿉니다.
+
+```csharp
+var config = database.GameConfigTable.All[0];
+
+// MasterMemory keeps each table sorted by its primary key, which is the level here and the
+// cleared line count below, so both project straight onto a zero-based lookup.
+var gravity = new int[database.GravityCurveTable.Count];
+for (var i = 0; i < gravity.Length; i++)
+{
+    gravity[i] = database.GravityCurveTable.All[i].TicksPerCell;
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/MasterData/SimulationConfigFactory.cs" />
+
+주 키 정렬이 보장되므로 레벨별 중력 테이블이 제로 베이스 배열 조회로 곧장 투영됩니다. 초 단위 값(카운트다운, 재대결 제한)은 여기서 전부 틱으로 환산되어, 이 지점을 지나면 시간 단위는 틱 하나뿐입니다.
+
+## 더 보기
+
+- [MessagePack-CSharp](../messagepack/): 이 바이너리의 직렬화 기반
+- [LogicLooper](../logiclooper/): 여기서 나온 틱레이트로 도는 루프
+- [아키텍처 개요](../../architecture/): "상태가 사는 곳" 표에서 MasterMemory의 자리

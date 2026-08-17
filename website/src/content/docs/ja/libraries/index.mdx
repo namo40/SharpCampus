@@ -1,0 +1,49 @@
+---
+title: ライブラリ
+description: リファレンスサーバーが使う MagicOnion と Cysharp ライブラリ 14 種の解説マップ。
+sidebar:
+  label: 概要
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+SharpCampus は、MagicOnion と Cysharp エコシステムのライブラリを実戦の形で編み込んだリファレンスサーバーです。このセクションではライブラリ 1 つにつき 1 ページ、「何か → なぜ使うのか → このプロジェクトのどこでどう使われているか → コードリンク」の順で解説します。全体構造の中での位置が気になったら、[アーキテクチャセクション](../architecture/)が地図になります。
+
+## 通信
+
+<CardGrid>
+  <LinkCard title="MagicOnion" href="magiconion/" description="C# インターフェースがそのままプロトコルになる RPC フレームワーク。Unary、StreamingHub、サーバー間呼び出し、Client Results、Heartbeat。" />
+  <LinkCard title="MessagePack-CSharp" href="messagepack/" description="すべての RPC ペイロードのバイナリ直列化。契約の属性と v3 ソースジェネレーター。" />
+</CardGrid>
+
+## ゲームロジック
+
+<CardGrid>
+  <LinkCard title="LogicLooper" href="logiclooper/" description="ルームをスレッドではなくループアクションに。コアごとにスレッド 1 本で全ルームを毎秒 20 ティックで回します。" />
+  <LinkCard title="MessagePipe" href="messagepipe/" description="マッチ終了を精算・ミッションの購読者へつなぐプロセス内メッセージング。ティックループから副作用を切り離します。" />
+  <LinkCard title="R3" href="r3/" description="Rx の新世代。ボットの知覚と判断を 1 本の宣言的パイプラインでつなぎます。" />
+  <LinkCard title="MasterMemory" href="mastermemory/" description="ゲーム定数の読み取り専用インメモリ DB。型付きクエリの生成と起動時検証。" />
+</CardGrid>
+
+## 値とパフォーマンス
+
+<CardGrid>
+  <LinkCard title="UnitGenerator" href="unitgenerator/" description="ID・数値プリミティブを 1 行の宣言で値オブジェクトに。オプションの組み合わせとワイヤ・DB 境界への統合。" />
+  <LinkCard title="Ulid" href="ulid/" description="生成時刻順に整列する識別子。RoomId・MatchId が境界ごとに扱われる方式。" />
+  <LinkCard title="ZString" href="zstring/" description="ArrayPool ベースのゼロアロケーション文字列組み立て。毎秒 20 フレームを描くコンソールレンダラー。" />
+  <LinkCard title="ZLinq" href="zlinq/" description="アロケーションなしの LINQ。入口の呼び出し 1 つだけのドロップインと、EF クエリとの境界線。" />
+  <LinkCard title="MemoryPack" href="memorypack/" description="ゼロエンコーディング直列化。サーバー同士だけが読み書きする Redis キャッシュという採用基準。" />
+</CardGrid>
+
+## ツール
+
+<CardGrid>
+  <LinkCard title="ZLogger" href="zlogger/" description="3 サーバーのログを UTF8 で直接書き出すゼロアロケーション構造化ロギング。ZLoggerMessage ソースジェネレーターと JSON コンソール出力。" />
+  <LinkCard title="ConsoleAppFramework" href="consoleappframework/" description="メソッド 1 つがコマンド 1 つになる検証 CLI。ソースジェネレーター専用なのでランタイム依存がありません。" />
+  <LinkCard title="DFrame" href="dframe/" description="ボットを仮想プレイヤーとして送り込む分散負荷テスト。マッチ 1 本がシナリオ 1 実行。" />
+</CardGrid>
+
+:::note[ここにない 2 本の柱: UniTask と YetAnotherHttpHandler]
+Cysharp エコシステムで Unity クライアントと対になる 2 つのライブラリは、このプロジェクトには登場しません。[UniTask](https://github.com/Cysharp/UniTask) は Unity のプレイヤーループに合わせたゼロアロケーション async/await 実装で、[YetAnotherHttpHandler](https://github.com/Cysharp/YetAnotherHttpHandler) は Unity で gRPC(HTTP/2)を話せるようにする HTTP ハンドラーです。このプロジェクトのクライアントは .NET コンソールアプリで、標準の async/await と既定の HTTP スタックで足りるため、どちらにも出番がありませんでした。Unity クライアントをつなぐ日が来たら、真っ先に追加される 2 パッケージです。
+:::

@@ -1,0 +1,114 @@
+---
+title: ゼロアロケーション
+description: 常時回るホットパスから GC を追い出す Cysharp 共通技法 3 種と、プロジェクト自身のコードが同じ規律を守る箇所を扱います。
+sidebar:
+  order: 4
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+Cysharp のライブラリ名には Z がよく付きます。[ZString](../../libraries/zstring/)、[ZLogger](../../libraries/zlogger/)、[ZLinq](../../libraries/zlinq/) の Z は Zero Allocation の Z です。この編ではそれらのライブラリが共有する技法を 1 か所に集め、さらにライブラリを使うだけでは終わらない話、つまり呼び出す側のコードが守るべき同じ規律まで追いかけます。
+
+## なぜアロケーションが問題なのか
+
+.NET では、ヒープアロケーション自体はポインターを 1 つ進める程度に安価です。コストはあとから、ガベージコレクションとして請求されます。第 0 世代の回収がどれだけ短くても停止は停止で、**回収の頻度はアロケーションの速度に比例します**。だから同じアロケーションでも、どこで起きるかが問題を分けます。リクエストごとに 1 回走るコードの一時オブジェクト数個は何でもありませんが、常時回るコードの一時オブジェクトは、負荷に正比例して積み上がる GC 圧力になります。
+
+このプロジェクトで「常時回る」場所は 3 つです。
+
+- **サーバーのティック**: ルームごとに毎秒 20 回。ルーム数百個ぶん掛け算されます。
+- **クライアントのレンダラー**: 毎秒 20 フレーム、フレームごとにセル 400 個。
+- **ロギング**: サーバーが生きている間ずっと。
+
+3 つとも停止に敏感な場所です。ティックスレッドが回収で止まればルーム全体のティックが遅れ、レンダラーが止まれば画面がかくつきます。
+
+## 技法 1: 借りたバッファに書き、結果だけをアロケートする
+
+文字列組み立ての一時文字列たちが最初の標的です。ZString の struct ビルダーは `ArrayPool` から借りたバッファに書き込み、最後の `ToString()` の 1 回だけアロケートして、バッファはプールへ返します。このプロジェクトではクライアントのレンダラーがフレーム全体(両盤面、HUD、キー案内)をこの方式で組み立て、フレームあたりのアロケーションを結果文字列 1 つに縮めています。ビルダーがクラスではなく**可変 struct** なので `ref` でしか渡してはいけない、という実戦ルールまで含め、詳細は [ZString ページ](../../libraries/zstring/)にあります。
+
+要点は、「借りて、使って、返す」が文字列だけの話ではないことです。プールしたメモリの上で作業し、完成品だけをアロケートするこの形は、下で見るとおりシリアライズにも、プロジェクト自身のコードにも現れます。
+
+## 技法 2: 文字列を経由せず UTF8 で直接書く
+
+コンソールでもファイルでも、ログの最終目的地は UTF8 のバイト列です。標準のロギング経路は UTF16 文字列を作り、途中で値型をボックス化し、出力直前にエンコードします。ZLogger はこの往復を丸ごと取り除き、パラメーターを UTF8 バッファへ直接書き込みます。作る必要のない中間表現は、アロケートする必要もないという発想です。`[ZLoggerMessage]` ソースジェネレーターがその書き込みコードをコンパイル時に作っておく構造は [ZLogger ページ](../../libraries/zlogger/)が扱います。
+
+同じ原理はワイヤーにもあります。[MessagePack](../../libraries/messagepack/) と [MemoryPack](../../libraries/memorypack/) のシリアライズも中間表現なしに出力バッファへバイナリを直接書く経路なので、毎ティック出ていくデルタのブロードキャストは文字列の組み立てなしにバイト列として完成します。
+
+## 技法 3: struct で回る列挙子
+
+標準 LINQ は演算子ごとにイテレーターオブジェクトを、変数を捕まえるラムダごとにクロージャーをヒープに作ります。ZLinq は同じ演算子を struct 列挙子のチェーンとして作り直し、このアロケーションをなくします。このプロジェクトでいちばん熱い使用箇所は、ボットがピースのスポーンごとに回す着地の採点(1 行の `MaxBy`)で、照会サービス群のレスポンス整形がそれに続きます。使用箇所の一覧と「EF クエリには使わない」という境界線は [ZLinq ページ](../../libraries/zlinq/)にあります。
+
+## ライブラリの外: 呼び出し側の同じ規律
+
+ライブラリがゼロアロケーションでも、呼び出し側が毎回配列を作れば台無しです。このプロジェクト自身のコードが同じ規律を守る箇所を見ると、まずシミュレーションの入力経路全体が `Span` ベースです。
+
+```csharp
+    public DuelTickResult Tick(ReadOnlySpan<GameInput> inputs1, ReadOnlySpan<GameInput> inputs2)
+```
+
+<SourceLink path="src/SharpCampus.GameCore/DuelSimulation.cs" />
+
+そして毎ティックこのシグネチャへ入力を流し込むルーム側は、ティックごとに新しい配列を作る代わりに、ルーム生成時に確保したバッファを再利用します。
+
+```csharp
+    private ReadOnlySpan<GameInput> TakeInputs(int playerIndex)
+    {
+        var queued = _queuedInputs[playerIndex];
+        var buffer = _tickInputs[playerIndex];
+        var count = Math.Min(queued.Count, buffer.Length);
+        for (var i = 0; i < count; i++)
+        {
+            buffer[i] = queued[i];
+        }
+
+        // Anything past the allowance is dropped rather than carried over: a flood must not buy a
+        // player extra actions on later ticks.
+        queued.Clear();
+        return buffer.AsSpan(0, count);
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+バッファの大きさがティックあたりの入力上限と同じだから、再利用が成立します。技法 1 の「借りたバッファ」の席に「あらかじめ確保したバッファ」が座った変形です。1 回使って捨てる 8 バイトなら、ヒープの代わりにスタックでも構いません。シードの生成がその例です。
+
+```csharp
+    private static ulong NewSeed()
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(ulong)];
+        RandomNumberGenerator.Fill(bytes);
+        return BinaryPrimitives.ReadUInt64LittleEndian(bytes);
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+計測すらこの規律の下にあります。毎ティックの所要時間の計測がループスレッドに座っていられる根拠が、コメントに書かれています。
+
+```csharp
+    // How much of the tick budget a room spends is what says whether this process can take another one,
+    // so every tick is measured. Reading the timestamps allocates nothing and costs less than the tick
+    // itself, which is what lets the measurement sit on the loop thread.
+    private bool Tick(DuelRoom room)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var running = room.Tick();
+
+        metrics.RecordTick(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return running;
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/RoomManager.cs" />
+
+`Stopwatch.StartNew()` はインスタンスをアロケートしますが、`GetTimestamp()` は数値を 1 つ読む静的呼び出しです。ホットパスの計測は、計測自体が観測対象を汚してはならないという、小さいながら同じ原則です。
+
+## どこで止めるか
+
+この規律は全面適用ではありません。リクエストごとに 1 回走るメタゲームのサービス群は、標準 LINQ と EF が作る一時オブジェクトをそのまま使います。1 回のログインで一時オブジェクト数個を節約するのは誰にも測れない利得で、その代償にコードが読み慣れない形になるのは誰にでも測れる損失だからです。基準は 1 つ。**負荷に比例して回るコードか**。そうなら上の技法が入り、そうでなければ普通に書きます。最適化が規律であるためには、適用範囲がまず規律的でなければなりません。
+
+## 関連ページ
+
+- [ZString](../../libraries/zstring/): 技法 1 の本拠地、レンダラーのフレーム組み立て
+- [ZLogger](../../libraries/zlogger/): 技法 2 の本拠地、UTF8 直接書き込み
+- [ZLinq](../../libraries/zlinq/): 技法 3 の本拠地とその境界
+- [LogicLooper](../../libraries/logiclooper/): この規律すべての理由であるティック予算

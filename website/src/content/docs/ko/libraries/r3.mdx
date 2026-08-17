@@ -1,0 +1,84 @@
+---
+title: R3
+description: Rx를 새로 설계한 리액티브 라이브러리. 봇의 지각(틱 델타)과 판단(입력 계획)을 하나의 선언적 파이프라인으로 잇습니다.
+sidebar:
+  order: 6
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+R3는 Rx(Reactive Extensions)를 현대 .NET에 맞춰 처음부터 다시 설계한 라이브러리입니다. UniRx와 dotnet/reactive를 만들고 유지해 온 개발자(neuecc)가 그 경험 위에서 만든 새 세대로, `Observable<T>`가 인터페이스가 아니라 추상 클래스이고 스케줄링이 .NET 표준 `TimeProvider` 위에 올라가 있습니다. SharpCampus에서는 BotServer가 씁니다. 큐에 상대가 없을 때 [소환되는 봇](../../architecture/matchmaking/)의 플레이 전체가 R3 파이프라인 하나입니다. 버전은 1.3.1입니다.
+
+- GitHub: [Cysharp/R3](https://github.com/Cysharp/R3)
+
+## 왜 쓰나
+
+봇의 플레이는 본질이 "이벤트에 대한 반응"입니다. 자기 보드에 새 피스가 스폰되면, 보드를 읽어 어디에 놓을지 계획하고, 그 계획을 입력 여러 개의 버스트로 바꿔, 사람 손 속도로 하나씩 서버에 보냅니다. 그리고 버스트의 마지막 하드 드롭이 다음 스폰을 일으키므로 이 사이클이 매치 끝까지 반복됩니다.
+
+이걸 콜백과 수동 타이머로 쓰면 "스폰 대기 → 계획 → 전송 타이머 → 취소 처리"가 상태 기계로 흩어집니다. R3로 쓰면 **스트림 변환의 연쇄 하나**가 되고, 구독 하나를 dispose하는 것으로 진행 중인 타이머까지 전부 정리됩니다.
+
+## 지각: 델타 스트림
+
+봇의 리시버는 룸이 밀어 주는 틱 델타를 로컬 리플리카에 반영한 뒤, 같은 델타를 `Subject<TickDelta>`로 흘려보냅니다.
+
+```csharp
+private readonly Subject<TickDelta> _deltas = new();
+
+// ...
+
+public Observable<TickDelta> Deltas => _deltas;
+
+// ...
+
+public void OnTickDelta(TickDelta delta)
+{
+    lock (_gate)
+    {
+        Replica.ApplyTickDelta(delta);
+    }
+
+    _deltas.OnNext(delta);
+}
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotReceiver.cs" />
+
+리플리카를 먼저 갱신하고 나서 push하는 순서가 계약입니다. 구독자가 델타를 받고 보드를 읽으면, 방금 통지받은 그 틱의 보드가 보입니다.
+
+## 판단: 파이프라인 전문
+
+봇의 플레이 전체가 이 하나의 식입니다.
+
+```csharp
+using var play = Resumed(receiver, seat)
+    .Concat(Spawns(receiver, seat))
+    .Select(_ => receiver.Read(
+        seat,
+        static (index, replica) => BotPlanner.Plan(replica.Boards[index.AsPrimitive()])))
+    .Where(static plan => plan.Length > 0)
+    .SelectMany(plan => Paced(plan, cadence))
+    .SubscribeAwait(hub, static (input, room, _) => new ValueTask(room.SendInputsAsync([input])));
+```
+
+<SourceLink path="src/SharpCampus.BotServer/Bots/BotPlayer.cs" />
+
+위에서부터 읽으면 이렇습니다.
+
+1. **`Resumed`**: 입장 시점에 이미 피스가 떠 있으면(스폰을 놓친 재개 상황) `Observable.Return`으로 한 번 발화하고, 아니면 `Observable.Empty`. `Concat`으로 스폰 스트림 앞에 이어 붙입니다.
+2. **`Spawns`**: 델타 스트림에서 자기 좌석의 `PieceSpawned` 이벤트만 거른 스트림.
+3. **`Select`**: 스폰마다 보드를 읽어 `BotPlanner`가 착지 계획(입력 배열)을 세웁니다.
+4. **`SelectMany(Paced(...))`**: 계획을 한 번에 쏟지 않고 `Observable.Zip(plan.ToObservable(), Observable.Interval(cadence, time))`으로 박자에 맞춰 입력 1개씩 흘립니다.
+5. **`SubscribeAwait`**: 입력마다 허브 호출(`SendInputsAsync`)을 await하는 비동기 구독입니다.
+
+버스트의 끝이 항상 하드 드롭이고 하드 드롭이 다음 스폰을 만들므로, 계획 2개가 동시에 비행하는 일이 구조적으로 없습니다.
+
+## R3다운 디테일 2가지
+
+**클로저 없는 연산자.** 파이프라인의 람다들이 `static`인 것이 보일 텐데, R3의 연산자들은 `Where(state, static (x, s) => ...)`처럼 상태를 인자로 넘기는 오버로드를 제공합니다. 델타마다 도는 경로에서 클로저 할당이 사라집니다.
+
+**시간은 `TimeProvider`의 것.** `Observable.Interval(cadence, time)`의 `time`은 DI로 주입된 `TimeProvider`입니다. 페이싱이 스트림 소유라서 구독을 dispose하면 타이머도 함께 멈추고, 테스트에서는 가짜 `TimeProvider`로 시간을 감아 돌릴 수 있습니다.
+
+## 더 보기
+
+- [매치메이킹](../../architecture/matchmaking/): 이 봇이 소환되는 경로 (봇 폴백)
+- [MagicOnion](../magiconion/): 파이프라인 끝에서 입력이 실려 가는 StreamingHub

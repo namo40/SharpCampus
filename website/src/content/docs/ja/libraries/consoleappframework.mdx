@@ -1,0 +1,176 @@
+---
+title: ConsoleAppFramework
+description: メソッド 1 つがコマンド 1 つになるソースジェネレーター CLI フレームワーク。検証 CLI の 16 コマンドと REPL の組み立てを扱います。
+sidebar:
+  order: 14
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ConsoleAppFramework は C# のメソッドを CLI コマンドに変えるフレームワークです。v5 で全体がソースジェネレーターとして作り直され、ランタイム依存が 0 個、引数パースの経路もアロケーションなしで動きます。このプロジェクトの検証 CLI である `SharpCampus.Cli`(アカウント・ショップ・ミッション・ランキング・対戦まで 16 コマンド)がこのフレームワークで作られています。バージョンは 5.7.13 です。
+
+- GitHub: [Cysharp/ConsoleAppFramework](https://github.com/Cysharp/ConsoleAppFramework)
+
+## なぜ使うか
+
+CLI フレームワークはふつう、コマンドやオプションを記述するオブジェクトグラフを手で組ませるか、実行時リフレクションでメソッドシグネチャを読みます。ConsoleAppFramework は発想を逆転させて、**メソッドシグネチャがそのままコマンド定義**であり、そのシグネチャを読んでパースコードを作る仕事をコンパイル時に済ませます。コンソールアプリは実行のたびにコールドスタートで、起動オーバーヘッドがそのまま体感になりますが、リフレクションがないので起動は軽く、Native AOT にもそのまま載ります。
+
+パッケージ参照がこの構造を物語っています。
+
+```xml
+<PackageReference Include="ConsoleAppFramework">
+  <PrivateAssets>all</PrivateAssets>
+  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+</PackageReference>
+```
+
+<SourceLink path="src/SharpCampus.Cli/SharpCampus.Cli.csproj" />
+
+アナライザー(ソースジェネレーター)としてだけ参照する形なので、ビルド成果物に ConsoleAppFramework のアセンブリはそもそも存在しません。フレームワークは横に並ぶ DLL ではなく、「自分のアセンブリの中に生成されたコード」として存在します。
+
+## エントリーポイント: Create ひとつ、登録コードなし
+
+`Program.cs` の冒頭です。
+
+```csharp
+// Every client and hub this process creates has to read the same MessagePack shapes the servers write.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// The culture has to be set before any command runs, so the option is consumed here rather than
+// declared on every command.
+args = Localization.Apply(args);
+
+// Command classes register themselves through [RegisterCommands]; nothing is added by hand here.
+var app = ConsoleApp.Create();
+
+if (args.Length > 0)
+{
+    await app.RunAsync(args);
+    return;
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Program.cs" />
+
+`ConsoleApp.Create()` のあとにコマンドを登録するコードが 1 行もありません。`[RegisterCommands]` の付いたクラスをソースジェネレーターがコンパイル時に見つけ、登録まで済ませてあるからです。コマンドファイルを新しく足せば、それで登録も済んでいます。
+
+`Create` の前に引数へ一度手を入れる行も見どころです。言語切り替えオプションは全コマンド共通なので、コマンドごとに宣言する代わりに `Localization.Apply` が先に消費し、残りの引数だけをフレームワークへ渡します。フレームワークの前後にこうした前処理を差し込みやすいのも、「ただのメソッド呼び出し」という構造のおかげです。
+
+## コマンドの解剖: シグネチャとドキュメントコメントがすべて
+
+アカウントコマンドクラスの `signup` です。クラスに付いているのは `[RegisterCommands]` だけです。
+
+```csharp
+/// <summary>Creates a Supabase account and signs in with it.</summary>
+/// <param name="email">Email address to register.</param>
+/// <param name="password">Password for the new account.</param>
+[Command("signup")]
+public async Task SignUpAsync([Argument] string email, [Argument] string password)
+{
+    var result = await SupabaseAuthClient.SignUpAsync(email, password);
+    if (result.AccessToken is null)
+    {
+        AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.SignUpFailed, result.ErrorMessage)}[/]");
+        return;
+    }
+
+    new ClientSession(result.AccessToken, email).Save();
+    AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.SignedUp, email)}[/]");
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Commands/AccountCommands.cs" />
+
+`[Command("signup")]` がコマンド名、`[Argument]` が位置引数の宣言です。ヘルプ文言を登録する API はなく、**XML ドキュメントコメントがそのままヘルプになります**。実際の出力はこうです。
+
+```text
+Usage: signup [arguments...] [-h|--help] [--version]
+
+Creates a Supabase account and signs in with it.
+
+Arguments:
+  [0] <string>    Email address to register.
+  [1] <string>    Password for the new account.
+```
+
+オプションとキャンセルは `duel` コマンドのシグネチャが見せてくれます。
+
+```csharp
+/// <summary>Queues for a duel and plays the match out.</summary>
+/// <param name="auto">Plays the match with random inputs instead of the keyboard.</param>
+/// <param name="cancellationToken">Cancellation of the queue wait or the running match.</param>
+[Command("duel")]
+public async Task ExecuteAsync(bool auto = false, CancellationToken cancellationToken = default)
+```
+
+<SourceLink path="src/SharpCampus.Cli/Commands/DuelCommand.cs" />
+
+既定値のあるパラメーターはオプションになり、`bool` は値なしのフラグ(`--auto`)になります。`CancellationToken` は特別扱いで、ヘルプには現れず、フレームワークがコンソールのキャンセル(Ctrl+C)につないで注入します。キュー待ちの最中に Ctrl+C を押すと、プロセスが断ち切られる代わりにこのトークンがキャンセルされ、コマンド側のコードが後始末の流れをたどれます。
+
+こうして積み上がった 16 コマンドの一覧も、ドキュメントコメントから生成されたものです。
+
+```text
+Commands:
+  buy         Buys a skin with the coins matches have paid out.
+  claim       Takes the coins a mission you finished today pays.
+  duel        Queues for a duel and plays the match out.
+  equip       Equips a skin you own; both screens of your next match draw your board with it.
+  guest       Creates an anonymous account, so a player can start without an address to give.
+  history     Lists the matches you have finished, newest first.
+  link        Turns the guest account in the stored session into a permanent one.
+  login       Signs in to Supabase and stores the session for later commands.
+  logout      Discards the stored session.
+  missions    Lists today's missions with what you have done towards them.
+  nickname    Renames the profile the stored session belongs to.
+  rank        Shows the leading hundred of a board and where you stand on it.
+  signup      Creates a Supabase account and signs in with it.
+  skins       Lists every skin with its price and whether you own it.
+  status      Queries every SharpCampus server for its name, version and clock.
+  whoami      Asks the ApiServer which account the stored session belongs to.
+```
+
+## REPL: 同じ app を 1 行ずつ
+
+引数なしで実行すると、CLI はプロンプトを出し、入力された行を同じ `app` でもう一度回します。
+
+```csharp
+while (true)
+{
+    // Console.ReadLine keeps the console host's built-in line editing and history, which a Spectre prompt would replace.
+    AnsiConsole.Markup("[green]cli>[/] ");
+
+    var line = Console.ReadLine();
+    if (line is null)
+    {
+        break;
+    }
+
+    var commandArgs = CommandLineParser.SplitCommandLine(line).ToArray();
+    if (commandArgs.Length == 0)
+    {
+        continue;
+    }
+
+    if (string.Equals(commandArgs[0], "exit", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandArgs[0], "quit", StringComparison.OrdinalIgnoreCase))
+    {
+        break;
+    }
+
+    // Keep the service provider alive across iterations: it will hold the interactive session state.
+    await app.RunAsync(commandArgs, disposeServiceProvider: false);
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Program.cs" />
+
+ConsoleAppFramework に REPL モードが内蔵されているわけではありません。`RunAsync` がプロセスを占有するフレームワークのエントリーポイントではなく、「引数配列を受け取ってコマンドを 1 つ実行するメソッド」なので、こうしたループをユーザーコード側で自然に組み立てられるというだけです。行を引数配列に分ける仕事は System.CommandLine のパーサー(`SplitCommandLine`)を借り、`disposeServiceProvider: false` で繰り返しのあいだサービスの寿命を保ちます。
+
+## どこに使わないか
+
+ゲーム専用のコンソールクライアント(`SharpCampus.Client`)に ConsoleAppFramework はありません。あちらは起動するとそのままゲームの流れひとつに入るプログラムで、管理すべきコマンド体系がないからです。コマンドが複数あって組み合わせて使う道具(検証 CLI)にだけ、コマンドフレームワークがあります。`duel` コマンドが立ち上げる実際の対戦画面は両クライアントが共有する `Client.Common` の担当で、そのレンダリングの話は [ZString](../zstring/) のページにあります。
+
+## あわせて読む
+
+- [MagicOnion](../magiconion/): コマンドが中で呼んでいる RPC クライアント
+- [ZLogger](../zlogger/): 同じツール軸、サーバー側のロギング

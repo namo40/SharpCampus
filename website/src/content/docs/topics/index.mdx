@@ -1,0 +1,20 @@
+---
+title: Topics
+description: Four cross-cutting essays, each reading several libraries through a single principle.
+sidebar:
+  label: Overview
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+The [library section](../libraries/) put one library at a time in the leading role. This section flips that around and leads with one principle at a time. Principles like "never block the tick loop" or "settle it at compile time" belong to no single library — they are design attitudes running across the whole stack, and scattered over individual pages they only show up as fragments. These four essays put the fragments back together.
+
+<CardGrid>
+  <LinkCard title="Concurrency model" href="concurrency/" description="Why the room server has almost no locks: one owner thread per piece of state, and every boundary crossed through a queue." />
+  <LinkCard title="Source generators" href="source-generators/" description="Half of this stack is written at compile time. A map of what seven libraries generate, and why the ecosystem moved away from reflection." />
+  <LinkCard title="Zero allocation" href="zero-allocation/" description="The three shared techniques that drive GC out of always-running hot paths, and where the project's own code keeps the same discipline." />
+  <LinkCard title="Serialization boundaries" href="serialization-boundaries/" description="Four formats coexisting in one system and the rule that picks them. One RoomId traced through every representation it wears." />
+</CardGrid>
+
+Each essay cross-links into the relevant library pages. When a library catches your interest, follow the link out; when a library page makes you want the bigger picture, this is the place to come back to.

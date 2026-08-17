@@ -1,0 +1,94 @@
+---
+title: MessagePipe
+description: In-process messaging that carries the match-finished event to the settlement and mission subscribers — the tool that pulls side effects out of the tick loop.
+sidebar:
+  order: 5
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+MessagePipe is Cysharp's high-performance messaging library: DI-first in-process Pub/Sub, extensible to cross-process transports (Redis and others) under the same API. SharpCampus uses it for exactly one job — **carrying the fact that a match ended out of the tick loop.** The version is 1.8.2.
+
+- GitHub: [Cysharp/MessagePipe](https://github.com/Cysharp/MessagePipe)
+
+## Why this library
+
+A finished match needs coin and rating settlement plus mission tallying, and both touch the database. But the verdict is reached inside [LogicLooper](../logiclooper/)'s tick loop, and the loop must never wait — a database round trip in the loop stalls every room on that looper.
+
+A C# `event` or a static event bus would decouple things too, but MessagePipe fills in what a game server misses there: publisher and subscribers meet through DI so tests can swap either side, a subscription is an `IDisposable` with an explicit lifetime, and async handlers (`IAsyncMessageHandler<T>`) are first-class. And however many subscribers attach, the publishing code never changes.
+
+## Publishing: fire and forget on the loop thread
+
+Registration is one line:
+
+```csharp
+builder.Services.AddMessagePipe();
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Program.cs" />
+
+The room takes an `IAsyncPublisher<MatchFinishedEvent>` and calls `Publish` on the tick the match ends. `Publish`, not `PublishAsync` — that is the point. It is fire-and-forget, waiting on no handler, so the loop thread moves on the instant the event is out.
+
+The event itself carries its own copy of everything settlement needs: match ID, outcome, reason, duration in ticks, and both players' board stats.
+
+```csharp
+public sealed record MatchFinishedEvent(
+    MatchId MatchId,
+    RoomId RoomId,
+    DuelOutcome Outcome,
+    MatchEndReason Reason,
+    int DurationTicks,
+    MatchParticipant Player1,
+    MatchParticipant Player2);
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchFinishedEvent.cs" />
+
+It holds no reference to the room, so even if the room closes and vanishes before a handler runs, settlement still receives one whole match.
+
+## Subscribing: tie the lifetime to the host
+
+MessagePipe connects nothing on its own. A handler receives messages only while the `IDisposable` returned by `Subscribe` stays alive. This project ties that lifetime to the host by giving each subscriber its own `IHostedService`:
+
+```csharp
+public Task StartAsync(CancellationToken cancellationToken)
+{
+    _subscription = matchFinished.Subscribe(_inFlight);
+    return Task.CompletedTask;
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchSettlementSubscription.cs" />
+
+There are two subscribers. <SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchSettlementHandler.cs" /> runs the settlement transaction and pushes the leaderboard; <SourceLink path="src/SharpCampus.RoomServer/Rooms/MissionProgressHandler.cs" /> counts the same match toward the day's missions. Neither knows the other exists, and the room publishes once. Living in separate hosted services means one failing never blocks the other, and since handlers run outside any request, each opens the scope its pooled DbContext needs via `IServiceScopeFactory`.
+
+## InFlightHandler: how shutdown waits for what was fired and forgotten
+
+Fire-and-forget has a price. When the server shuts down, the last match's settlement may still be on its way to the database — and if nothing holds a reference to that work, shutdown cuts the write off mid-flight.
+
+The decorator <SourceLink path="src/SharpCampus.RoomServer/Rooms/InFlightHandler.cs" /> is that reference. It wraps the real handler, counts calls in flight, and exposes `WhenIdleAsync()` for the moment they all finish. The hosted service that owns the subscription uses it on the way down:
+
+```csharp
+public async Task StopAsync(CancellationToken cancellationToken)
+{
+    _subscription?.Dispose();
+
+    try
+    {
+        await _inFlight.WhenIdleAsync().WaitAsync(cancellationToken);
+    }
+    catch (OperationCanceledException)
+    {
+        // Shutdown has run out of patience; whatever was written is written.
+    }
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchSettlementSubscription.cs" />
+
+Dispose the subscription first so no new messages arrive, then wait out the work already started — bounded by the host's shutdown timeout. Publish without waiting, but shut down waiting: that truce is what protects the final settlement in the [draining](../../architecture/room-lifecycle/) scenario.
+
+## See also
+
+- [Settlement events](../../architecture/settlement/): the full picture of this pipeline (Elo, the single transaction, the leaderboard)
+- [LogicLooper](../logiclooper/): the never-waiting loop that makes an outlet necessary in the first place

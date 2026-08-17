@@ -1,0 +1,81 @@
+---
+title: Source generators
+description: Half of this stack is written at compile time. A map of what seven libraries generate, and why the ecosystem moved away from reflection.
+sidebar:
+  order: 3
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+Of the fourteen libraries this site covers, seven do their work as source generators. RPC proxies ([MagicOnion](../../libraries/magiconion/)), serialization formatters ([MessagePack](../../libraries/messagepack/), [MemoryPack](../../libraries/memorypack/)), value objects ([UnitGenerator](../../libraries/unitgenerator/)), typed queries ([MasterMemory](../../libraries/mastermemory/)), log methods ([ZLogger](../../libraries/zlogger/)), an entire CLI ([ConsoleAppFramework](../../libraries/consoleappframework/)) — a substantial part of this server runs on code written by the compiler rather than by a person. Each page told one of those stories; this essay ties them into a single thread: **why the whole ecosystem moved in the same direction.**
+
+## Reflection's three invoices
+
+Before source generators, the standard answer was runtime reflection and IL emit. Inspecting types while the program runs and producing serializer or proxy code on the spot is flexible, but three invoices arrive with it.
+
+1. **Some environments refuse it.** Where runtime code generation is forbidden — Unity IL2CPP, Native AOT — the approach simply does not work.
+2. **The cost is billed at run time.** Type analysis and code emission pile up right after startup and on first calls, stretching server warm-up and cold starts.
+3. **Mistakes are also discovered at run time.** A missing attribute or a type that breaks the conventions compiles fine and surfaces as an exception the first time it is serialized.
+
+A source generator moves the same work to compile time. The build pays the generation cost, a broken convention becomes a build error, and the output is ordinary C# you can open with go-to-definition in the IDE and read. This project has no Unity client, but the contract project targets netstandard2.1 on the premise of Unity sharing, so invoice number one is a real requirement here — and numbers two and three pay off with servers alone.
+
+## The generation map
+
+What each of the seven generators takes in and puts out, at a glance:
+
+| Library | Input (declaration) | Output | Lives in |
+| --- | --- | --- | --- |
+| [MagicOnion](../../libraries/magiconion/) | `[MagicOnionClientGeneration]` marker | service client proxies | Client.Common · BotServer |
+| [MessagePack](../../libraries/messagepack/) | `[MessagePackObject]` types | per-type formatters + an assembly resolver | Shared (contracts) |
+| [UnitGenerator](../../libraries/unitgenerator/) | `[UnitOf]` empty struct | the value object itself (equality, operators, formatters, converters, `Parse`) | Shared |
+| [MasterMemory](../../libraries/mastermemory/) | `[MemoryTable]` models | `MemoryDatabase` and typed queries per table | Shared |
+| [ZLogger](../../libraries/zlogger/) | `[ZLoggerMessage]` partial methods | UTF8 direct-write log bodies | Server.Common · RoomServer · BotServer |
+| [ConsoleAppFramework](../../libraries/consoleappframework/) | the `ConsoleApp.Create()` call site and command methods | the entire parser, help, and dispatcher | Cli |
+| [MemoryPack](../../libraries/memorypack/) | `[MemoryPackable]` types | per-type formatters | Server.Common |
+
+One common trait stands out: every input is a **declaration**. An empty struct, a partial method signature, an attributed record. The developer states only what exists; the generated code fills in how it works.
+
+## Where wiring is needed, and where it is not
+
+Six of the seven need no wiring code. Put `[UnitOf]` on a struct and the struct itself is completed; a `[MessagePackObject]`'s formatter is discovered automatically by the resolver chain (the v3 story on the [MessagePack page](../../libraries/messagepack/)); `[ZLoggerMessage]` becomes the body of its own partial method. The place of the declaration is the place of the installation.
+
+The exception is MagicOnion's client proxies. Contracts are interfaces, so a marker has to tell the generator what to scan and build implementations for.
+
+```csharp
+// The bot connects through pre-generated proxies rather than runtime code generation: the dynamic
+// client cannot emit a receiver that carries a client result, and the duel hub's rematch offer is one.
+// The type is only a marker for the assembly to scan: every contract in Shared gets a client.
+[MagicOnionClientGeneration(typeof(IStatusService))]
+internal partial class MagicOnionClientInitializer;
+```
+
+<SourceLink path="src/SharpCampus.BotServer/MagicOnionClientInitializer.cs" />
+
+The BotServer's marker records the one place in this project where pre-generation is **mandatory rather than optional**: the runtime-generated client cannot emit a hub receiver that carries a client result, and the duel hub's rematch offer uses exactly that feature. The ApiServer's server-to-server client, on the other hand, has no marker. `IRoomControlService` lives in `Shared.Internal`, outside any marker's scan range, and a server process is an environment where runtime code generation is freely available, so the default path is enough. Even within one stack, how much gets built ahead of time is decided by the execution environment.
+
+## The package references show it too
+
+That a generator is a component of the compiler can be read straight from the csproj. This is the contract project's UnitGenerator reference:
+
+```xml
+    <PackageReference Include="UnitGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+```
+
+<SourceLink path="src/SharpCampus.Shared/SharpCampus.Shared.csproj" />
+
+`analyzers` is the actual delivery, and `PrivateAssets=all` declares that the reference is used only for the build and never flows to anything referencing this project. Once compilation ends, UnitGenerator is nowhere in the output — only the generated code remains in the assembly. The extreme of this shape is [ConsoleAppFramework](../../libraries/consoleappframework/): it has no runtime assembly at all, so it never even appears in a dependency list. MessagePack, MemoryPack, and MasterMemory are the mixed form, shipping the runtime library and the generator together in one package.
+
+## What is left: a contract without repetition
+
+Step back from the seven outputs and they are all solving the same problem: **the mechanical repetition between a contract and its implementation.** Declare a DTO and the formatter should follow; declare an interface and so should the proxy; declare a log template and so should the write code. When a person writes that repetition, the cost is not the typing — it is the **inconsistency**: change the declaration, forget to update the implementation, and you have a runtime bug. In code regenerated on every compile, that inconsistency cannot exist.
+
+In this stack, then, source generators are less a performance technique than **a device that makes the declaration the single source of truth**. The performance is the prize money that comes on top.
+
+## See also
+
+- [MessagePack-CSharp](../../libraries/messagepack/): the v3 transition from reflection and IL emit to generator-by-default
+- [UnitGenerator](../../libraries/unitgenerator/): the case where one declared line receives the most generated code
+- [ConsoleAppFramework](../../libraries/consoleappframework/): the extreme form with zero runtime dependency

@@ -1,0 +1,94 @@
+---
+title: ZString
+description: ArrayPool から借りたバッファに積むゼロアロケーション文字列組み立て。毎秒 20 フレームを丸ごと描くコンソールレンダラーが使用例です。
+sidebar:
+  order: 10
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ZString は、文字列組み立ての途中アロケーションをなくす Cysharp のライブラリです。`ArrayPool` から借りたバッファの上に積んでいく struct ビルダーと、一時文字列なしで引数をつなぐ `Concat`・`Format` を提供します。このプロジェクトでは、コンソールクライアントのボードレンダラーが主な使用場所です。バージョンは 2.6.0 です。
+
+- GitHub: [Cysharp/ZString](https://github.com/Cysharp/ZString)
+
+## なぜ使うのか
+
+コンソールクライアントは、サーバーのデルタが届くたびに 2 つのボード、HUD、キー案内まで画面全体を 1 つの文字列に組み立てて、毎秒 20 回描き直します。セルを 1 つつなぐたびに `+` や補間で一時文字列を作ると、フレームごとに数百個の短命なガベージが生まれ、その回収がフレーム間の小さな引っかかりとして現れます。ZString のビルダーはプールから借りたバッファに書くだけで、アロケーションは最後の `ToString()` の 1 回だけです。フレームあたりの割り当てが、結果の文字列 1 つにまで縮みます。
+
+ちなみにサーバー側のロギングも同じ技法の上に立っています。ZLogger が ZString のフォーマッティングエンジンの系譜を使う話は、[ZLogger のページ](../zlogger/)で扱います。
+
+## フレームの組み立て: struct ビルダー
+
+レンダラーはフレームごとにビルダーを 1 つ作り、画面全体を積み上げます。
+
+```csharp
+        // The builder is a mutable struct passed by ref, which rules out a using declaration.
+        var frame = ZString.CreateStringBuilder();
+        try
+        {
+            AppendHeader(ref frame, Strings.BoardHeaderYou, displayNames[seat]);
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelRenderer.cs" />
+
+`CreateStringBuilder()` が返す `Utf16ValueStringBuilder` は、クラスではなく **mutable struct** です。コピーされた瞬間に別々のバッファ状態が 2 つ生まれるため、組み立てを分担する内部メソッドにはすべて `ref` で渡します。ところが `using var` で宣言した変数は読み取り専用で `ref` に渡せないため、using 宣言の代わりに try/finally で自ら返却します。
+
+```csharp
+            return frame.ToString();
+        }
+        finally
+        {
+            frame.Dispose();
+        }
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelRenderer.cs" />
+
+`Dispose()` が、借りたバッファをプールに返す返却地点です。組み立てを分担するメソッドのシグネチャはこう見えます。
+
+```csharp
+    // A color code goes in only where the color changes, which keeps a frame from carrying one per cell.
+    private static void AppendCell(ref Utf16ValueStringBuilder frame, ref string painted, string color, string glyph)
+    {
+        if (painted != color)
+        {
+            frame.Append(color.Length > 0 ? color : Reset);
+            painted = color;
+        }
+
+        frame.Append(glyph);
+    }
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelRenderer.cs" />
+
+ボード 2 面ぶんの 400 セルが毎秒 20 回通る、いちばん熱い経路です。`Append` はバッファに書くだけなので、この中でのアロケーションはありません。フレームを丸ごと組み立てて一度に出力する設計(前のフレームの上に上書き)と合わさって、画面の 2 つのボードは常に同じティックに属し、描画コストは文字列 1 つぶんです。
+
+## 単発の連結: Concat
+
+ビルダーを立てるほどでもない場所は `ZString.Concat` が受け持ちます。1 つは、完成したフレームをカーソル復帰シーケンス・通知行と一緒に送り出す出力地点です。
+
+```csharp
+    private void Draw()
+    {
+        var frame = receiver.Read(renderer, static (r, replica) => r.BuildFrame(replica));
+        Console.Out.Write(ZString.Concat(CursorHome, frame, _notice));
+    }
+```
+
+<SourceLink path="src/SharpCampus.Client.Common/Duel/DuelSession.cs" />
+
+もう 1 つは、リマッチ待ちのカウントダウンプロンプトです。毎秒同じ行を書き直す場所なので、やはり一時文字列なしでつなぎます。
+
+```csharp
+                Console.Out.Write(ZString.Concat("\r", Localization.Format(CommonStrings.RematchPrompt, remaining), "   "));
+```
+
+<SourceLink path="src/SharpCampus.Client/Duel/DuelFlow.cs" />
+
+`Concat` は引数を内部バッファに順にフォーマットし、結果の文字列 1 つだけを作ります。`string.Concat` と違うのは、`int` のような値型の引数もボクシングや途中の `ToString()` なしでバッファに直接書かれる点です。
+
+## あわせて読む
+
+- [はじめに](../../getting-started/): このレンダラーが描く画面を実際に立ち上げる場所
+- [アーキテクチャ概要](../../architecture/): フレームの材料であるティックデルタが届く経路

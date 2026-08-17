@@ -1,0 +1,55 @@
+---
+title: "Part 2: Docker Compose"
+description: Build the servers into container images and run the whole stack behind an Envoy single entry point.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import SourceLink from '../../../components/SourceLink.astro';
+
+Part 1 ran the servers out of the source tree; this is the shape they deploy in. A single compose file (<SourceLink path="deploy/docker/docker-compose.yml" />) builds the meta-game server, two match servers (`room-1` and `room-2`) and the bot server into images, puts an Envoy entry point in front of them, and brings up a Redis of the stack's own.
+
+Supabase alone stays your host's stack: `supabase start` has to be running with the schema applied, by the same commands as in part 1.
+
+## 1. Up and down
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up --build -d
+docker compose -f deploy/docker/docker-compose.yml down
+```
+
+The first build compiles the servers and the master data database into the images, so it takes a few minutes.
+
+## 2. The client knows one port
+
+The client reaches everything through the entry point on port 5000. Point the `SHARPCAMPUS_SERVER` environment variable at it:
+
+<Tabs>
+  <TabItem label="PowerShell">
+    ```powershell
+    $env:SHARPCAMPUS_SERVER = 'http://localhost:5000'; dotnet run --project src/SharpCampus.Client
+    ```
+  </TabItem>
+  <TabItem label="POSIX shell">
+    ```bash
+    SHARPCAMPUS_SERVER=http://localhost:5000 dotnet run --project src/SharpCampus.Client
+    ```
+  </TabItem>
+</Tabs>
+
+A gRPC call that carries no `room-id` header goes to the meta-game server. A duel connection carries one, and Envoy looks that room up — through an internal endpoint the meta-game server answers off Redis — to route the stream to the match server instance that owns it. The configuration lives in <SourceLink path="deploy/docker/envoy.yaml" />.
+
+The match servers publish no port to the host at all. That is exactly why the REPL's `status` command reports the room server as unreachable — and it is the expected answer. Everything else — queueing, duels, missions, the shop, the rankings — works through port 5000 alone.
+
+## 3. If you want metrics
+
+Observability is a profile of its own:
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml --profile observability up -d
+```
+
+That adds a Prometheus scraping all four servers' metric endpoints at [http://localhost:19090](http://localhost:19090) (the customary 9090 falls inside a port range Windows reserves). The game's own counters ride along: tick duration, live rooms, queue depth and bots in play.
+
+Next is [Part 3: Kubernetes on kind](../kubernetes/) — the same images on a local cluster, and what a rolling update does to a live match.

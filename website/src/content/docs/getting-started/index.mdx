@@ -1,0 +1,36 @@
+---
+title: Getting Started
+description: Run the SharpCampus server yourself in three shapes — from source, on Docker Compose, and on Kubernetes.
+sidebar:
+  label: Overview
+  order: 1
+---
+
+This guide brings up the same server stack in three shapes. Each one is closer to how it actually deploys, and each part ends with you playing a match.
+
+1. [Part 1: Run from Source](local-run/). The workflow right after cloning: only auth, the database and Redis run in containers, while the three servers run under `dotnet run`.
+2. [Part 2: Docker Compose](docker-compose/). The servers become container images, with two match servers standing behind a single Envoy entry point.
+3. [Part 3: Kubernetes on kind](kubernetes/). The whole stack moves onto a local three-node cluster — including proof that a rolling update never cuts a live match short.
+
+## Prerequisites
+
+| Tool | Used in |
+| --- | --- |
+| [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | everything (the client always runs from source) |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | everything |
+| [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) | parts 1 and 2 (part 3 runs its own auth stack in-cluster) |
+| [kind](https://kind.sigs.k8s.io/) + [kubectl](https://kubernetes.io/docs/tasks/tools/) | part 3 |
+
+Building and testing work the same in every part, straight from the repository root. The test suite finishes without Docker — tests that want Redis skip themselves when nothing is listening.
+
+```bash
+dotnet build
+dotnet test
+```
+
+## Client options shared by every part
+
+The two console clients — `SharpCampus.Client`, the game, and `SharpCampus.Cli`, the REPL — take the same options.
+
+- `--lang en|ko|ja` switches the display language.
+- The `SHARPCAMPUS_SERVER` environment variable sets the server address. Part 1 uses the default; parts 2 and 3 point it at the single entry point.

@@ -1,0 +1,69 @@
+---
+title: MemoryPack
+description: C# 메모리 레이아웃을 거의 그대로 쓰는 제로 인코딩 직렬화기. 서버끼리만 읽고 쓰는 Redis 캐시에 채택한 이유를 다룹니다.
+sidebar:
+  order: 12
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MemoryPack은 Cysharp의 바이너리 직렬화기로, "제로 인코딩"이 정체성입니다. 필드를 하나씩 태그 붙여 변환하는 대신 C# 객체의 메모리 레이아웃을 거의 그대로 읽고 써서, MessagePack보다도 한 단계 빠릅니다. 소스 제너레이터 전용으로 설계되어 리플렉션 경로 자체가 없고, 그만큼 요구 조건도 분명합니다. .NET 7 이상에서만 동작합니다. 버전은 1.21.4입니다.
+
+- GitHub: [Cysharp/MemoryPack](https://github.com/Cysharp/MemoryPack)
+
+## 왜 쓰나
+
+직렬화기 선택은 "양끝에 누가 있는가"의 문제입니다. 클라이언트와 주고받는 계약은 포맷 규격이 공개되어 있고 플랫폼을 가리지 않는 [MessagePack](../messagepack/)이 맡습니다. 반면 리더보드 캐시는 Redis에 앉아 있는 동안 우리 서버 프로세스만 읽고 씁니다. 양끝이 모두 같은 .NET 서버라면 교차 플랫폼 의무가 없으니, 남는 선택 기준은 속도뿐입니다. 그 자리에 가장 빠른 직렬화기를 놓은 것입니다.
+
+이 프로젝트에서는 채택 위치가 캐시 한 곳이라 분량은 작지만, "경계의 성격이 직렬화기를 고른다"는 선택 기준 자체가 이 페이지의 주제입니다.
+
+## 캐시 전용 타입: 계약을 재사용하지 않는다
+
+캐시에 앉는 타입은 `[MemoryPackable]`을 붙인 partial record 하나가 전부입니다.
+
+```csharp
+// The cache's own wire format, mirroring the contract DTO rather than reusing it: MemoryPack needs
+// .NET 7 or newer and SharpCampus.Shared is built for netstandard2.1, so what crosses the wire to a
+// client and what sits in Redis between servers are serialized by different libraries on purpose.
+[MemoryPackable]
+internal sealed partial record CachedLeaderboardEntry(int Rank, string Nickname, int Score);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Leaderboards/CachedLeaderboardEntry.cs" />
+
+계약에는 똑같이 생긴 `LeaderboardEntry`가 이미 있는데도 재사용하지 않고 미러링합니다. 계약이 사는 `SharpCampus.Shared`는 Unity 공유를 전제로 netstandard2.1로 빌드되고, MemoryPack은 .NET 7 이상을 요구하기 때문입니다. 결과적으로 "클라이언트로 나가는 와이어(MessagePack)"와 "서버 사이의 Redis(MemoryPack)"가 다른 라이브러리로 직렬화되는데, 이는 우회가 아니라 의도한 분리입니다. 캐시 포맷은 계약이 아니므로 계약 어셈블리에 묶일 이유가 없습니다.
+
+## 캐시 읽고 쓰기
+
+사용법은 정적 메서드 두 개가 전부입니다. 조립된 리더보드 페이지를 통째로 직렬화해 Redis 문자열 하나에 넣고, 읽을 때 되돌립니다.
+
+```csharp
+public sealed class RedisLeaderboardCache(IConnectionMultiplexer redis) : ILeaderboardCache
+{
+    // Expiry is the only invalidation there is, so this window is what a settlement can be behind by:
+    // for up to five seconds a page still lists the places, and the nicknames, it was assembled from.
+    private static readonly TimeSpan _lifetime = TimeSpan.FromSeconds(5);
+
+    public async Task<LeaderboardEntry[]?> GetTopAsync(string board)
+    {
+        var value = await redis.GetDatabase().StringGetAsync(LeaderboardKeys.Cache(board));
+        if (value.IsNullOrEmpty)
+        {
+            return null;
+        }
+
+        var cached = MemoryPackSerializer.Deserialize<CachedLeaderboardEntry[]>(((ReadOnlyMemory<byte>)value).Span);
+```
+
+<SourceLink path="src/SharpCampus.Server.Common/Leaderboards/RedisLeaderboardCache.cs" />
+
+`MemoryPackSerializer.Serialize`가 `byte[]`를 내고 `Deserialize`가 `Span`을 받는, 설정 없는 대칭 API입니다. 리졸버도 옵션 객체도 등장하지 않는 것은 소스 제너레이터가 컴파일 타임에 타입별 포매터를 전부 확정해 두기 때문입니다.
+
+## 무효화는 만료가 대신한다
+
+캐시 수명은 5초이고, 이것이 유일한 무효화입니다. 정산이 순위를 바꿔도 캐시를 지우러 오지 않으므로, 페이지는 최대 5초까지 정산보다 뒤처질 수 있습니다. 리더보드 상위 100명은 계정 단위 데이터가 아니라 전원이 같은 것을 보는 페이지라, 이 지연을 받아들이는 대가로 조회 폭주가 Redis 정렬 집합 연산과 닉네임 일괄 조회로 번지는 것을 막습니다. 캐시를 채우는 쪽과 읽는 쪽이 어떤 흐름에 놓여 있는지는 [정산 이벤트 해설](../../architecture/settlement/)이 다룹니다.
+
+## 더 보기
+
+- [MessagePack-CSharp](../messagepack/): 계약 쪽 직렬화기, 그리고 두 라이브러리의 역할 분담
+- [정산 이벤트](../../architecture/settlement/): 이 캐시가 놓인 리더보드 갱신 흐름

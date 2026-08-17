@@ -1,0 +1,189 @@
+---
+title: DFrame
+description: 負荷シナリオを C# クラスとして書く分散負荷テストフレームワーク。ボットをそのまま仮想プレイヤーに載せ、マッチ丸ごと 1 本を回します。
+sidebar:
+  order: 15
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+import VideoClip from '../../../../components/VideoClip.astro';
+
+DFrame は負荷テストのシナリオを C# クラス(`Workload`)として書く分散負荷テストフレームワークです。コントローラーが Web UI を開き、ワーカーがコントローラーに接続して指示された同時実行数で Workload を実行します。ワーカープロセスを増やせば負荷も水平に伸びる構造です。このプロジェクトでは `tests/SharpCampus.LoadTest` が、マッチメイキングと対戦の経路、そしてランキング読み取りを 2 つの Workload で叩きます。バージョンは 2.0.0 です。
+
+- GitHub: [Cysharp/DFrame](https://github.com/Cysharp/DFrame)
+
+## なぜ使うか
+
+汎用の負荷ツールはたいてい HTTP リクエストの記述に合わせて作られているので、このプロジェクトのトラフィック(MagicOnion 上の gRPC、MessagePack ペイロード、StreamingHub のリアルタイムセッション)を再現しようとすると、プロトコルをツール側に作り直すことになります。DFrame ならシナリオはただの C# コードなので、実際のクライアントが使うライブラリ(`MagicOnion.Client`、契約アセンブリ)をそのまま持ち込めます。再現すべきプロトコルはなく、負荷の形が実際のクライアントの形と同じになります。
+
+面白い事実をひとつ。DFrame 自体が、このサイトが扱ってきたライブラリで作られています。パッケージ依存関係には [MagicOnion](../magiconion/)(コントローラーとワーカーの間の通信)、[MessagePack](../messagepack/)、[MessagePipe](../messagepipe/)、[ConsoleAppFramework](../consoleappframework/) が並びます。このスタックで実戦の道具を建てるとどうなるかを見せてくれる標本でもあります。
+
+## ハーネス: ボットがそのまま仮想プレイヤー
+
+ハーネスの `Program.cs` の全文です。
+
+```csharp
+using DFrame;
+using MagicOnion.Serialization;
+using SharpCampus.BotServer.Bots;
+using SharpCampus.BotServer.Configuration;
+using SharpCampus.Shared.Serialization;
+
+// Every workload here is a client of the two servers, and every client it creates has to read the same
+// MessagePack shapes those servers write. DFrame's own controller-to-worker channel carries a serializer
+// of its own, so this does not disturb it.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// Web UI on the first port, workers connect on the second.
+var builder = DFrameApp.CreateBuilder(7312, 7313);
+
+builder.ConfigureServices(services =>
+{
+    services.Configure<BotServerOptions>(options =>
+    {
+        // The same switch the console client honours, so the one env var aims this harness at a direct
+        // server or at the deployed entry point alike.
+        if (Environment.GetEnvironmentVariable("SHARPCAMPUS_SERVER") is { Length: > 0 } server)
+        {
+            options.ApiServerAddress = server;
+        }
+
+        // A pool of this harness's own. Nicknames are unique across accounts, so virtual players cannot
+        // wear the names the bot server's accounts already hold.
+        options.EmailPattern = "loadtest{0}@sharpcampus.dev";
+        options.NicknamePattern = "load{0}";
+        options.Password = "sharpcampus-loadtest";
+
+        // The ceiling on concurrency: a virtual player holds one account for as long as it plays.
+        options.AccountPoolSize = 32;
+    });
+
+    services.AddSingleton(TimeProvider.System);
+    services.AddSingleton<IBotAuthClient, SupabaseBotAuthClient>();
+    services.AddSingleton<IBotProfileClient, ApiBotProfileClient>();
+    services.AddSingleton<BotAccountPool>();
+    services.AddSingleton<IBotRunner, BotPlayer>();
+});
+
+await builder.RunAsync();
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/Program.cs" />
+
+`DFrameApp.CreateBuilder(7312, 7313)` は、コントローラーとワーカーを 1 プロセスに同居させる形です。最初のポートが Web UI、2 番目がワーカー接続用なので、負荷をさらに積みたければワーカーだけを別プロセスで追加できます。
+
+DI の登録部がこのハーネスの中心アイデアです。`BotAccountPool` や `BotPlayer` といった登録は、すべてボットサーバーのものそのままです([R3](../r3/) のページで知覚と判断のパイプラインを扱った、まさにあのボットです)。仮想プレイヤーを新しく実装したのではなく、**ボットを負荷生成器として再利用**しているので、キュー参加からチケット、ルーム入室、ティックごとの入力送信まで、サーバーが受ける負荷はコンソールクライアント 1 人分の負荷と同じ形になります。アカウントプールだけはハーネス専用のパターン(`loadtest{0}`)に差し替えて、ニックネーム一意制約の下でボットサーバーのアカウントと衝突しないようにしています。プールサイズ 32 が、そのまま同時実行数の上限です。
+
+## マッチ丸ごとを 1 実行に: DuelMatchWorkload
+
+```csharp
+// One execution is one whole match: queue, ticket, room, inputs, result. The player behind it is the
+// bot server's, unchanged, so what this puts the servers through is what a console client puts them
+// through. Run it at a concurrency of two or more, or the virtual players have nobody to be paired with.
+public sealed class DuelMatchWorkload(BotAccountPool pool, IBotRunner runner) : Workload
+{
+    public override async Task ExecuteAsync(WorkloadContext context)
+    {
+        var account = pool.Lease()
+            ?? throw new InvalidOperationException($"Concurrency is above the {pool.Size} accounts in the pool.");
+
+        try
+        {
+            if (!await pool.EnsureSignedInAsync(account))
+            {
+                throw new InvalidOperationException($"Could not sign {account.Email} in. Run: supabase start");
+            }
+
+            await runner.PlayAsync(account, context.CancellationToken);
+        }
+        finally
+        {
+            pool.Return(account);
+        }
+    }
+}
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/DuelMatchWorkload.cs" />
+
+`Workload` を継承して `ExecuteAsync` を実装すれば、シナリオ 1 本の出来上がりです。ここでは 1 回の実行がマッチ丸ごと 1 本(キュー参加、チケット受領、ルーム接続、入力、結果)です。仮想プレイヤー同士の組み合わせが成立するように同時実行数を 2 以上にする必要があるという制約も、シナリオが「本物のマッチメイキング」を通るからこそ生まれる、このハーネスらしい制約です。
+
+## 呼び出しだけを計測: LeaderboardQueryWorkload
+
+Workload には実行の前後にライフサイクルがあります。ランキング読み取り側がその形を見せてくれます。
+
+```csharp
+// One execution is one ranking read. The account and the channel are set up once per virtual player, so
+// what each execution times is the call and nothing around it.
+public sealed class LeaderboardQueryWorkload(BotAccountPool pool, IOptions<BotServerOptions> options) : Workload
+{
+    private BotAccount? _account;
+    private GrpcChannel? _channel;
+    private ILeaderboardService? _leaderboards;
+
+    public override async Task SetupAsync(WorkloadContext context)
+    {
+        _account = pool.Lease()
+            ?? throw new InvalidOperationException($"Concurrency is above the {pool.Size} accounts in the pool.");
+
+        if (!await pool.EnsureSignedInAsync(_account))
+        {
+            throw new InvalidOperationException($"Could not sign {_account.Email} in. Run: supabase start");
+        }
+
+        _channel = GrpcChannel.ForAddress(options.Value.ApiServerAddress);
+        _leaderboards = MagicOnionClient.Create<ILeaderboardService>(_channel)
+            .WithHeaders(new Metadata { { "authorization", $"Bearer {_account.AccessToken}" } });
+    }
+
+    public override async Task ExecuteAsync(WorkloadContext context)
+        => await _leaderboards!.WithCancellationToken(context.CancellationToken)
+            .GetLeaderboardAsync(LeaderboardKind.Rating);
+
+    public override Task TeardownAsync(WorkloadContext context)
+    {
+        _channel?.Dispose();
+
+        if (_account is not null)
+        {
+            pool.Return(_account);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/LeaderboardQueryWorkload.cs" />
+
+仮想プレイヤーごとに `SetupAsync` が 1 回(サインイン、チャネル、クライアントの準備)、`ExecuteAsync` が指示された回数だけ、最後に `TeardownAsync` が 1 回呼ばれます。準備コストをすべて `SetupAsync` へ押し出したおかげで `ExecuteAsync` に残るのは RPC 呼び出し 1 行だけになり、計測結果はその呼び出しのレイテンシそのものになります。何を計測したいかが、ライフサイクル上の配置で表現される構造です。
+
+## 実行のかたち
+
+`dotnet run` でハーネスを立ち上げ、ブラウザーで `http://localhost:7312` を開くと、Workload 一覧からシナリオを選び、同時実行数と実行回数を指定して回し、結果の要約を見る Web UI が現れます。環境変数 `SHARPCAMPUS_SERVER` ひとつで、ローカル直結のサーバーにもデプロイ済みのエントリーポイントにも、同じハーネスの照準を合わせられます。
+
+下の映像が実際のワンサイクルです。Kubernetes にデプロイしたエントリーポイントへ照準を合わせたハーネスで、`DuelMatchWorkload` のマッチ 2 本を回し(待ち時間は早送り編集)、続けて `LeaderboardQueryWorkload` の読み取り 5,000 回を回します。マッチ側の結果行に刻まれたレイテンシ 93 秒が、そのままマッチ 1 本の長さです。
+
+<VideoClip src="media/dframe-web-ui.mp4" poster="media/dframe-web-ui-poster.jpg" label="DFrame の Web UI で 2 つのワークロードを実行する画面録画" />
+
+プロジェクトファイルには、実戦で出会う類の統合ディテールがひとつ残っています。
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- DFrame's controller is a Blazor Server app whose scoped CSS only reaches the output under the
+         web SDK, and on .NET 10 only behind this flag. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
+  </PropertyGroup>
+```
+
+<SourceLink path="tests/SharpCampus.LoadTest/SharpCampus.LoadTest.csproj" />
+
+コントローラーの Web UI が Blazor Server アプリなので、ハーネスプロジェクトは Web SDK でビルドする必要があり、.NET 10 では scoped CSS のアセットがこのフラグの向こう側にあります。なお、このプロジェクトは `tests/` の下にありますが、xUnit のスイートではなく直接実行するハーネスです。
+
+## あわせて読む
+
+- [MagicOnion](../magiconion/): ワークロードが叩く経路であり、DFrame 内部通信の土台
+- [R3](../r3/): ここで再利用しているボットプレイヤーの知覚・判断パイプライン
+- [アーキテクチャ概要](../../architecture/): 負荷が流れ込むサーバー構成

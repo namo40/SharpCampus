@@ -1,0 +1,176 @@
+---
+title: ConsoleAppFramework
+description: 메서드 하나가 명령 하나가 되는 소스 제너레이터 CLI 프레임워크. 검증 CLI의 명령 16개와 REPL 조립을 다룹니다.
+sidebar:
+  order: 14
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+ConsoleAppFramework는 C# 메서드를 CLI 명령으로 바꿔 주는 프레임워크입니다. v5에서 전체가 소스 제너레이터로 다시 만들어져서, 런타임 의존성이 0개이고 인자 파싱 경로도 할당 없이 돕니다. 이 프로젝트의 검증 CLI인 `SharpCampus.Cli`(계정·상점·미션·랭킹·대전까지 명령 16개)가 이 프레임워크로 만들어졌습니다. 버전은 5.7.13입니다.
+
+- GitHub: [Cysharp/ConsoleAppFramework](https://github.com/Cysharp/ConsoleAppFramework)
+
+## 왜 쓰나
+
+CLI 프레임워크는 보통 명령·옵션을 기술하는 객체 그래프를 손으로 조립하게 하거나, 런타임 리플렉션으로 메서드 시그니처를 읽습니다. ConsoleAppFramework는 접근을 뒤집어서 **메서드 시그니처가 곧 명령 정의**이고, 그 시그니처를 읽고 파싱 코드를 만드는 일을 컴파일 타임에 끝냅니다. 콘솔 앱은 실행할 때마다 콜드 스타트라 시작 오버헤드가 그대로 체감되는데, 리플렉션이 없으니 기동이 가볍고 Native AOT에도 그대로 올라갑니다.
+
+패키지 참조가 이 구조를 그대로 보여줍니다.
+
+```xml
+<PackageReference Include="ConsoleAppFramework">
+  <PrivateAssets>all</PrivateAssets>
+  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+</PackageReference>
+```
+
+<SourceLink path="src/SharpCampus.Cli/SharpCampus.Cli.csproj" />
+
+분석기(소스 제너레이터)로만 참조하는 형태라서, 빌드 결과물에 ConsoleAppFramework 어셈블리가 아예 없습니다. 프레임워크가 별도 DLL이 아니라 "우리 어셈블리 안에 생성된 코드"로 존재합니다.
+
+## 진입점: Create 하나, 등록 코드 없음
+
+`Program.cs`의 시작 부분입니다.
+
+```csharp
+// Every client and hub this process creates has to read the same MessagePack shapes the servers write.
+MagicOnionSerializerProvider.Default = ContractSerialization.Provider;
+
+// The culture has to be set before any command runs, so the option is consumed here rather than
+// declared on every command.
+args = Localization.Apply(args);
+
+// Command classes register themselves through [RegisterCommands]; nothing is added by hand here.
+var app = ConsoleApp.Create();
+
+if (args.Length > 0)
+{
+    await app.RunAsync(args);
+    return;
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Program.cs" />
+
+`ConsoleApp.Create()` 다음에 명령을 등록하는 코드가 한 줄도 없습니다. `[RegisterCommands]`가 붙은 클래스를 소스 제너레이터가 컴파일 타임에 찾아내 등록까지 끝내 두기 때문입니다. 명령 파일을 새로 추가하면 그걸로 등록도 끝입니다.
+
+`Create` 전에 인자를 한 번 손보는 줄도 눈여겨볼 만합니다. 언어 전환 옵션은 모든 명령에 공통이라, 명령마다 선언하는 대신 `Localization.Apply`가 먼저 소비하고 나머지 인자만 프레임워크에 넘깁니다. 프레임워크 앞뒤로 이런 전처리를 끼워 넣기 좋은 것도 "그냥 메서드 호출"이라는 구조 덕분입니다.
+
+## 명령 해부: 시그니처와 문서 주석이 전부
+
+계정 명령 클래스의 `signup`입니다. 클래스에는 `[RegisterCommands]`만 붙어 있습니다.
+
+```csharp
+/// <summary>Creates a Supabase account and signs in with it.</summary>
+/// <param name="email">Email address to register.</param>
+/// <param name="password">Password for the new account.</param>
+[Command("signup")]
+public async Task SignUpAsync([Argument] string email, [Argument] string password)
+{
+    var result = await SupabaseAuthClient.SignUpAsync(email, password);
+    if (result.AccessToken is null)
+    {
+        AnsiConsole.MarkupLineInterpolated($"[red]{Localization.Format(Strings.SignUpFailed, result.ErrorMessage)}[/]");
+        return;
+    }
+
+    new ClientSession(result.AccessToken, email).Save();
+    AnsiConsole.MarkupLineInterpolated($"[green]{Localization.Format(Strings.SignedUp, email)}[/]");
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Commands/AccountCommands.cs" />
+
+`[Command("signup")]`이 명령 이름, `[Argument]`가 위치 인자 선언입니다. 도움말 문구를 따로 등록하는 API는 없고, **XML 문서 주석이 그대로 도움말이 됩니다**. 실제 출력이 이렇습니다.
+
+```text
+Usage: signup [arguments...] [-h|--help] [--version]
+
+Creates a Supabase account and signs in with it.
+
+Arguments:
+  [0] <string>    Email address to register.
+  [1] <string>    Password for the new account.
+```
+
+옵션과 취소는 `duel` 명령의 시그니처가 보여줍니다.
+
+```csharp
+/// <summary>Queues for a duel and plays the match out.</summary>
+/// <param name="auto">Plays the match with random inputs instead of the keyboard.</param>
+/// <param name="cancellationToken">Cancellation of the queue wait or the running match.</param>
+[Command("duel")]
+public async Task ExecuteAsync(bool auto = false, CancellationToken cancellationToken = default)
+```
+
+<SourceLink path="src/SharpCampus.Cli/Commands/DuelCommand.cs" />
+
+기본값이 있는 매개변수는 옵션이 되고, `bool`은 값 없는 플래그(`--auto`)가 됩니다. `CancellationToken`은 도움말에 나타나지 않는 특별 취급으로, 프레임워크가 콘솔 취소(Ctrl+C)에 연결해 주입합니다. 대기열을 기다리다 Ctrl+C를 누르면 프로세스가 끊기는 대신 이 토큰이 취소되어, 명령 쪽 코드가 정리 흐름을 탈 수 있습니다.
+
+이렇게 쌓인 명령 16개의 전체 목록도 문서 주석에서 생성된 것입니다.
+
+```text
+Commands:
+  buy         Buys a skin with the coins matches have paid out.
+  claim       Takes the coins a mission you finished today pays.
+  duel        Queues for a duel and plays the match out.
+  equip       Equips a skin you own; both screens of your next match draw your board with it.
+  guest       Creates an anonymous account, so a player can start without an address to give.
+  history     Lists the matches you have finished, newest first.
+  link        Turns the guest account in the stored session into a permanent one.
+  login       Signs in to Supabase and stores the session for later commands.
+  logout      Discards the stored session.
+  missions    Lists today's missions with what you have done towards them.
+  nickname    Renames the profile the stored session belongs to.
+  rank        Shows the leading hundred of a board and where you stand on it.
+  signup      Creates a Supabase account and signs in with it.
+  skins       Lists every skin with its price and whether you own it.
+  status      Queries every SharpCampus server for its name, version and clock.
+  whoami      Asks the ApiServer which account the stored session belongs to.
+```
+
+## REPL: 같은 앱을 줄마다
+
+인자 없이 실행하면 CLI는 프롬프트를 띄우고, 입력된 줄을 같은 `app`으로 다시 돌립니다.
+
+```csharp
+while (true)
+{
+    // Console.ReadLine keeps the console host's built-in line editing and history, which a Spectre prompt would replace.
+    AnsiConsole.Markup("[green]cli>[/] ");
+
+    var line = Console.ReadLine();
+    if (line is null)
+    {
+        break;
+    }
+
+    var commandArgs = CommandLineParser.SplitCommandLine(line).ToArray();
+    if (commandArgs.Length == 0)
+    {
+        continue;
+    }
+
+    if (string.Equals(commandArgs[0], "exit", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandArgs[0], "quit", StringComparison.OrdinalIgnoreCase))
+    {
+        break;
+    }
+
+    // Keep the service provider alive across iterations: it will hold the interactive session state.
+    await app.RunAsync(commandArgs, disposeServiceProvider: false);
+}
+```
+
+<SourceLink path="src/SharpCampus.Cli/Program.cs" />
+
+ConsoleAppFramework에 REPL 모드가 내장된 것은 아닙니다. `RunAsync`가 프로세스를 점유하는 프레임워크 진입점이 아니라 "인자 배열을 받아 명령 하나를 실행하는 메서드"라서, 이런 루프를 사용자 코드 쪽에서 자연스럽게 조립할 수 있을 뿐입니다. 줄을 인자 배열로 쪼개는 일은 System.CommandLine의 파서(`SplitCommandLine`)를 빌려 오고, `disposeServiceProvider: false`로 반복 사이에 서비스 수명을 유지합니다.
+
+## 어디에 쓰지 않나
+
+게임 전용 콘솔 클라이언트(`SharpCampus.Client`)에는 ConsoleAppFramework가 없습니다. 그쪽은 실행하면 바로 게임 흐름 하나로 들어가는 프로그램이라 명령 체계가 필요 없기 때문입니다. 명령이 여럿이고 조합해 쓰는 도구(검증 CLI)에만 명령 프레임워크가 있습니다. `duel` 명령이 띄우는 실제 대전 화면은 두 클라이언트가 공유하는 `Client.Common`의 몫이고, 그 렌더링 이야기는 [ZString](../zstring/) 페이지에 있습니다.
+
+## 더 보기
+
+- [MagicOnion](../magiconion/): 명령들이 안에서 부르는 RPC 클라이언트
+- [ZLogger](../zlogger/): 같은 도구 축, 서버 쪽 로깅

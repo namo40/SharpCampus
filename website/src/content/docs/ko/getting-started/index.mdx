@@ -1,0 +1,36 @@
+---
+title: 시작 가이드
+description: SharpCampus 서버를 소스, Docker Compose, Kubernetes의 3가지 형태로 직접 띄워 봅니다.
+sidebar:
+  label: 개요
+  order: 1
+---
+
+이 가이드는 같은 서버 스택을 3가지 형태로 띄웁니다. 뒤로 갈수록 실제 배포 형태에 가까워지고, 각 부의 끝에서는 직접 게임을 한 판 플레이합니다.
+
+1. [1부: 소스에서 실행](local-run/). 저장소를 받은 직후의 개발 흐름입니다. 인증·DB·Redis만 컨테이너로 띄우고, 서버 3개는 `dotnet run`으로 실행합니다.
+2. [2부: Docker Compose](docker-compose/). 서버를 컨테이너 이미지로 빌드하고, Envoy 단일 진입점 뒤에 매치 서버 2대를 배치합니다.
+3. [3부: kind 위의 Kubernetes](kubernetes/). 노드 3개로 구성된 로컬 클러스터에 전체 스택을 올리고, 롤링 업데이트가 진행 중인 매치를 끊지 않는 것까지 확인합니다.
+
+## 준비물
+
+| 도구 | 쓰는 곳 |
+| --- | --- |
+| [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | 전부 (클라이언트는 항상 소스에서 실행) |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | 전부 |
+| [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) | 1부·2부 (3부는 클러스터 안에 자체 인증 스택이 있음) |
+| [kind](https://kind.sigs.k8s.io/) + [kubectl](https://kubernetes.io/docs/tasks/tools/) | 3부 |
+
+빌드와 테스트는 어느 부에서든 저장소 루트에서 그대로 동작합니다. 테스트는 Docker 없이도 끝까지 실행됩니다 (Redis가 필요한 테스트는 리스너가 없으면 자동으로 스킵됩니다).
+
+```bash
+dotnet build
+dotnet test
+```
+
+## 클라이언트 공통 옵션
+
+콘솔 클라이언트 2종(게임인 `SharpCampus.Client`, REPL인 `SharpCampus.Cli`)은 같은 옵션을 받습니다.
+
+- `--lang en|ko|ja`: 표시 언어를 바꿉니다.
+- `SHARPCAMPUS_SERVER` 환경변수: 접속할 서버 주소. 1부는 기본값 그대로 쓰고, 2부·3부는 진입점 주소 하나만 지정합니다.

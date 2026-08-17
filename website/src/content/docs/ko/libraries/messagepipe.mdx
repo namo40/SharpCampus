@@ -1,0 +1,94 @@
+---
+title: MessagePipe
+description: 매치 종료를 정산·미션 구독자에게 잇는 인프로세스 메시징. 틱 루프에서 부수 효과를 떼어 내는 도구입니다.
+sidebar:
+  order: 5
+---
+
+import SourceLink from '../../../../components/SourceLink.astro';
+
+MessagePipe는 Cysharp의 고성능 메시징 라이브러리입니다. 프로세스 안의 Pub/Sub을 DI 우선으로 제공하고, 같은 API로 프로세스 밖(Redis 등)까지 확장할 수 있습니다. SharpCampus에서는 딱 한 가지 일에 씁니다. **매치가 끝났다는 사실을 틱 루프 밖으로 내보내는 것**입니다. 버전은 1.8.2입니다.
+
+- GitHub: [Cysharp/MessagePipe](https://github.com/Cysharp/MessagePipe)
+
+## 왜 쓰나
+
+매치가 끝나면 코인·레이팅 정산과 미션 집계가 필요하고, 둘 다 데이터베이스를 만집니다. 그런데 승패를 판정한 곳은 [LogicLooper](../logiclooper/)의 틱 루프 안이고, 루프는 절대 기다려서는 안 됩니다. DB 왕복을 루프에서 직접 하는 순간 같은 루퍼의 모든 룸이 멈춥니다.
+
+C# `event`나 정적 이벤트 버스로도 분리는 됩니다만, MessagePipe는 게임 서버에서 아쉬운 부분들을 채워 줍니다. 발행자와 구독자가 DI로 연결되어 테스트에서 갈아 끼우기 쉽고, 구독이 `IDisposable`이라 수명이 명시적이며, 비동기 핸들러(`IAsyncMessageHandler<T>`)가 일급입니다. 그리고 발행 한 번에 구독자 몇이 붙든 발행하는 쪽 코드는 그대로입니다.
+
+## 발행: 루프 스레드에서 던지고 잊는다
+
+등록은 한 줄입니다.
+
+```csharp
+builder.Services.AddMessagePipe();
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Program.cs" />
+
+룸은 `IAsyncPublisher<MatchFinishedEvent>`를 주입받아, 매치가 끝나는 틱에 `Publish`를 호출합니다. `PublishAsync`가 아니라 `Publish`인 것이 핵심입니다. 핸들러의 완료를 기다리지 않는 fire-and-forget이라 루프 스레드는 발행 즉시 다음 일로 넘어갑니다.
+
+이벤트 자체는 정산에 필요한 모든 것(매치 ID, 승패, 사유, 지속 틱, 양쪽의 보드 통계)을 자기 복사본으로 들고 다닙니다.
+
+```csharp
+public sealed record MatchFinishedEvent(
+    MatchId MatchId,
+    RoomId RoomId,
+    DuelOutcome Outcome,
+    MatchEndReason Reason,
+    int DurationTicks,
+    MatchParticipant Player1,
+    MatchParticipant Player2);
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchFinishedEvent.cs" />
+
+룸을 참조하지 않으므로, 핸들러가 돌기 전에 룸이 닫혀 사라져도 정산은 온전한 매치 하나를 그대로 받습니다.
+
+## 구독: 수명은 호스트에 묶는다
+
+MessagePipe는 스스로 아무것도 연결하지 않습니다. 핸들러는 `Subscribe`가 돌려준 `IDisposable`이 살아 있는 동안만 메시지를 받습니다. 이 프로젝트는 그 수명을 호스트에 묶기 위해 구독자마다 `IHostedService`를 하나씩 둡니다.
+
+```csharp
+public Task StartAsync(CancellationToken cancellationToken)
+{
+    _subscription = matchFinished.Subscribe(_inFlight);
+    return Task.CompletedTask;
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchSettlementSubscription.cs" />
+
+구독자는 2개입니다. <SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchSettlementHandler.cs" />는 정산 트랜잭션을 실행하고 리더보드에 반영하며, <SourceLink path="src/SharpCampus.RoomServer/Rooms/MissionProgressHandler.cs" />는 같은 매치를 그날의 미션 진행으로 집계합니다. 서로의 존재를 모르고, 룸은 한 번만 발행합니다. 각자 다른 hosted service에 살기 때문에 한쪽의 실패가 다른 쪽을 막지 않고, 핸들러는 요청 스코프 밖에서 돌므로 DbContext가 필요한 스코프를 `IServiceScopeFactory`로 직접 엽니다.
+
+## InFlightHandler: 던지고 잊은 것을 셧다운이 기다리는 법
+
+fire-and-forget에는 대가가 있습니다. 서버가 종료될 때, 마지막 매치의 정산이 아직 DB로 가는 중일 수 있습니다. 아무도 그 작업의 참조를 쥐고 있지 않다면 셧다운이 쓰기를 중간에 끊어 버립니다.
+
+그 참조 역할을 하는 것이 데코레이터 <SourceLink path="src/SharpCampus.RoomServer/Rooms/InFlightHandler.cs" />입니다. 실제 핸들러를 감싸 진행 중인 호출 수를 세고, `WhenIdleAsync()`로 전부 끝나는 순간을 기다릴 수 있게 해 줍니다. 구독을 소유한 hosted service는 종료 시 이렇게 씁니다.
+
+```csharp
+public async Task StopAsync(CancellationToken cancellationToken)
+{
+    _subscription?.Dispose();
+
+    try
+    {
+        await _inFlight.WhenIdleAsync().WaitAsync(cancellationToken);
+    }
+    catch (OperationCanceledException)
+    {
+        // Shutdown has run out of patience; whatever was written is written.
+    }
+}
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/MatchSettlementSubscription.cs" />
+
+먼저 구독을 dispose해 새 메시지를 끊고, 이미 시작된 처리는 호스트 셧다운 한도 안에서 끝까지 기다립니다. 발행은 기다리지 않되 종료는 기다린다, 이 화해가 [드레이닝](../../architecture/room-lifecycle/) 시나리오에서 마지막 정산을 지켜 줍니다.
+
+## 더 보기
+
+- [정산 이벤트](../../architecture/settlement/): 이 파이프라인의 전체 그림 (Elo 계산, 단일 트랜잭션, 리더보드)
+- [LogicLooper](../logiclooper/): 부수 효과를 내보내야 하는 이유인 "절대 기다리지 않는 루프"

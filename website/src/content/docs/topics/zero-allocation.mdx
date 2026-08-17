@@ -1,0 +1,114 @@
+---
+title: Zero allocation
+description: The three shared techniques that drive GC out of always-running hot paths, and where the project's own code keeps the same discipline.
+sidebar:
+  order: 4
+---
+
+import SourceLink from '../../../components/SourceLink.astro';
+
+The letter Z keeps appearing in Cysharp library names. The Z in [ZString](../../libraries/zstring/), [ZLogger](../../libraries/zlogger/), and [ZLinq](../../libraries/zlinq/) stands for zero allocation. This essay gathers the techniques those libraries share into one place, and then follows the part of the story that using a library alone does not finish — the same discipline required of the code that calls them.
+
+## Why allocation is the problem
+
+In .NET, a heap allocation by itself is about as cheap as bumping a pointer. The cost is billed later, as garbage collection. However short a gen 0 collection is, a pause is a pause, and **collection frequency is proportional to allocation rate**. So the same allocation matters or doesn't depending on where it happens: a few temporaries in code that runs once per request are nothing, while temporaries in always-running code become GC pressure that scales linearly with load.
+
+This project has three always-running places:
+
+- **The server tick**: twenty per second per room, multiplied by hundreds of rooms.
+- **The client renderer**: twenty frames a second, four hundred cells per frame.
+- **Logging**: for as long as the server lives.
+
+All three are pause-sensitive. A tick thread paused for a collection delays every room's tick; a paused renderer stutters the screen.
+
+## Technique 1: write into a rented buffer, allocate only the result
+
+The temporary strings of string building are the first target. ZString's struct builder writes into a buffer rented from `ArrayPool`, allocates exactly once at the final `ToString()`, and hands the buffer back to the pool. In this project, the client renderer assembles the entire frame this way — both boards, the HUD, the key legend — shrinking each frame's allocations to the one result string. The practical rules, down to the builder being a **mutable struct** that must only be passed by `ref`, are on the [ZString page](../../libraries/zstring/).
+
+The point is that "borrow, use, return" is not a string story. Working in pooled memory and allocating only the finished product is a shape that reappears in serialization and in the project's own code below.
+
+## Technique 2: skip the string, write UTF8 directly
+
+Whether it goes to a console or a file, a log's final destination is UTF8 bytes. The standard logging path builds a UTF16 string, boxes value-type parameters on the way, and encodes just before output; ZLogger removes that round trip entirely and writes parameters straight into a UTF8 buffer. An intermediate representation that never needs to exist never needs to be allocated. How the `[ZLoggerMessage]` source generator produces that write code at compile time is covered on the [ZLogger page](../../libraries/zlogger/).
+
+The same principle lives on the wire. Serialization in [MessagePack](../../libraries/messagepack/) and [MemoryPack](../../libraries/memorypack/) also writes binary directly into the output buffer with no intermediate form, so the delta broadcast leaving every tick becomes bytes without any string assembly.
+
+## Technique 3: enumerators that are structs
+
+Standard LINQ puts an iterator object on the heap per operator, and a closure per lambda that captures a variable. ZLinq reimplements the same operators as chains of struct enumerators, removing those allocations. The hottest use in this project is the bot's landing-spot scoring on every piece spawn (a one-line `MaxBy`), with the query services' response shaping behind it. The list of call sites, and the boundary rule of never using it in EF queries, are on the [ZLinq page](../../libraries/zlinq/).
+
+## Outside the libraries: the callers' side of the discipline
+
+A zero-allocation library is undone by a caller that allocates an array on every call. Looking at where this project's own code keeps the same discipline: first, the simulation's whole input path is `Span`-based.
+
+```csharp
+    public DuelTickResult Tick(ReadOnlySpan<GameInput> inputs1, ReadOnlySpan<GameInput> inputs2)
+```
+
+<SourceLink path="src/SharpCampus.GameCore/DuelSimulation.cs" />
+
+And the room feeding inputs into that signature every tick reuses buffers set up at room creation instead of making a new array per tick.
+
+```csharp
+    private ReadOnlySpan<GameInput> TakeInputs(int playerIndex)
+    {
+        var queued = _queuedInputs[playerIndex];
+        var buffer = _tickInputs[playerIndex];
+        var count = Math.Min(queued.Count, buffer.Length);
+        for (var i = 0; i < count; i++)
+        {
+            buffer[i] = queued[i];
+        }
+
+        // Anything past the allowance is dropped rather than carried over: a flood must not buy a
+        // player extra actions on later ticks.
+        queued.Clear();
+        return buffer.AsSpan(0, count);
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+The reuse works because the buffer size equals the per-tick input allowance — technique 1 with "a buffer set up in advance" standing in for "a rented buffer". And when it's eight bytes used once, the stack will do instead of the heap. Seed generation is the example:
+
+```csharp
+    private static ulong NewSeed()
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(ulong)];
+        RandomNumberGenerator.Fill(bytes);
+        return BinaryPrimitives.ReadUInt64LittleEndian(bytes);
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/DuelRoom.cs" />
+
+Even measurement sits under the discipline. The comment records why the per-tick timing can afford to live on the loop thread:
+
+```csharp
+    // How much of the tick budget a room spends is what says whether this process can take another one,
+    // so every tick is measured. Reading the timestamps allocates nothing and costs less than the tick
+    // itself, which is what lets the measurement sit on the loop thread.
+    private bool Tick(DuelRoom room)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var running = room.Tick();
+
+        metrics.RecordTick(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return running;
+    }
+```
+
+<SourceLink path="src/SharpCampus.RoomServer/Rooms/RoomManager.cs" />
+
+`Stopwatch.StartNew()` allocates an instance; `GetTimestamp()` is a static call reading one number. Instrumentation on a hot path must not contaminate what it observes — a small case of the same principle.
+
+## Where it stops
+
+The discipline is not applied everywhere. The metagame services running once per request use standard LINQ and EF, temporaries and all. Saving a handful of temporary objects in one login is a gain nobody can measure, while making the code unfamiliar is a loss everybody can. The criterion is a single question: **does this code run in proportion to load?** If yes, the techniques above go in; if not, write it plainly. For an optimization to be a discipline, its scope has to be disciplined first.
+
+## See also
+
+- [ZString](../../libraries/zstring/): technique 1 at home, the renderer's frame assembly
+- [ZLogger](../../libraries/zlogger/): technique 2 at home, UTF8 direct write
+- [ZLinq](../../libraries/zlinq/): technique 3 at home, and its boundary
+- [LogicLooper](../../libraries/logiclooper/): the tick budget all this discipline exists for
